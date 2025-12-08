@@ -100,6 +100,8 @@ export async function createOrder(req, res) {
 
     res.status(201).json(order);
   } catch (error) {
+    console.log("inside the order controller");
+    console.log(error.message);
     res.status(400).json({ error: error.message });
   }
 }

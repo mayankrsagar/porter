@@ -1,8 +1,10 @@
-// server.js
 import "dotenv/config";
 
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
+// ✅ Added: fs for tmp folder creation & auth routes
+import fs from "fs";
 import http from "http";
 import mongoose from "mongoose";
 import path, { dirname } from "path";
@@ -11,6 +13,7 @@ import { fileURLToPath } from "url";
 
 import connectDB from "./config/db.js";
 import analyticsRouter from "./routes/analytics.js";
+import authRoutes from "./routes/auth.js";
 import driversRouter from "./routes/drivers.js";
 import ordersRouter from "./routes/orders.js";
 import vehiclesRouter from "./routes/vehicles.js";
@@ -22,17 +25,19 @@ const __dirname = dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 
+// ✅ Added: create tmp folder for multer if not exists
+const tmpDir = path.join(process.cwd(), "tmp");
+if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+
 // Configure CORS origins
 const devOrigins = ["http://localhost:3000", "http://localhost:5173"];
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // allow server-to-server or curl
+    if (!origin) return callback(null, true);
     if (process.env.NODE_ENV === "production") {
-      // Change this to your actual production origin(s)
       const prodOrigin = process.env.FRONTEND_ORIGIN;
       return callback(null, origin === prodOrigin);
     }
-    // dev mode
     return callback(null, devOrigins.includes(origin));
   },
   methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
@@ -52,59 +57,52 @@ const io = new Server(server, {
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
 
-// Serve frontend: in production serve built files, in dev skip or optionally proxy
+// Serve frontend
 if (process.env.NODE_ENV === "production") {
-  // Vite builds into 'dist' by default
   const frontendDist = path.join(__dirname, "../frontend/dist");
   app.use(express.static(frontendDist));
-
-  // Serve index.html for SPA routes (keep API routes above)
   app.get("*", (req, res) => {
     res.sendFile(path.join(frontendDist, "index.html"));
   });
 } else {
-  // In dev, if you want a fallback static (optional)
   const frontendStatic = path.join(__dirname, "../frontend");
   app.use("/static-front", express.static(frontendStatic));
 }
 
-// MongoDB connection (async)
-
+// MongoDB connection
 connectDB();
 
-// Mount API routes (keep API prefix before the SPA wildcard)
+// Mount API routes (✅ Added auth routes)
 app.use("/api/orders", ordersRouter);
 app.use("/api/vehicles", vehiclesRouter);
 app.use("/api/drivers", driversRouter);
 app.use("/api/analytics", analyticsRouter);
+app.use("/api/auth", authRoutes); // ✅ Auth routes integrated here
 
-// Basic health check
+// Health check
 app.get("/healthz", (req, res) =>
   res.json({ ok: true, uptime: process.uptime() })
 );
 
-// Socket.io for real-time updates
+// Socket.io
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
-
   socket.on("join-order", (orderId) => {
     if (orderId) socket.join(`order-${orderId}`);
   });
-
   socket.on("join-fleet", () => {
     socket.join("fleet-updates");
   });
-
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
   });
 });
 
 // Global error handler
-/* eslint-disable-next-line no-unused-vars */
 app.use((err, req, res, next) => {
-  console.error(err && err.stack ? err.stack : err);
+  console.error(err?.stack || err);
   res.status(500).json({ error: err?.message || "Something went wrong!" });
 });
 
@@ -125,8 +123,6 @@ const shutdown = async () => {
     console.log("HTTP server closed.");
     process.exit(0);
   });
-
-  // force exit after 10s
   setTimeout(() => {
     console.error("Forcing shutdown");
     process.exit(1);
@@ -136,5 +132,4 @@ const shutdown = async () => {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-// Export app/io/server for use in controllers/tests
 export { app, io, server };

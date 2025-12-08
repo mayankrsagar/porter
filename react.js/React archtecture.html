@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>React KT Module 2: Architecture</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <style>
+      /* SHARED THEME STYLES (Identical to Module 1) */
+      html {
+        scroll-snap-type: y mandatory;
+      }
+      body {
+        margin: 0;
+        background-color: #020617;
+        color: #cbd5e1;
+        font-family: "Outfit", sans-serif;
+        overflow-x: hidden;
+      }
+      .slide-wrapper {
+        height: 100vh;
+        width: 100vw;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        scroll-snap-align: start;
+        position: relative;
+      }
+      .slide-container {
+        align-items: flex-start;
+        background-color: #0f172a;
+        border-radius: 16px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
+        height: 720px;
+        justify-content: center;
+        overflow: hidden;
+        padding: 40px 60px;
+        position: relative;
+        width: 1280px;
+        transform: scale(0.9);
+      }
+      .slide-container::before {
+        content: "";
+        height: 100%;
+        left: 0;
+        position: absolute;
+        top: 0;
+        width: 100%;
+        background-image: linear-gradient(
+            rgba(124, 58, 237, 0.03) 1px,
+            transparent 1px
+          ),
+          linear-gradient(90deg, rgba(124, 58, 237, 0.03) 1px, transparent 1px);
+        background-size: 40px 40px;
+        z-index: 0;
+      }
+      .slide-container::after {
+        background: linear-gradient(90deg, #7c3aed, #a855f7);
+        bottom: 0;
+        content: "";
+        height: 6px;
+        left: 0;
+        position: absolute;
+        width: 100%;
+        z-index: 2;
+      }
+      .slide-container > * {
+        position: relative;
+        z-index: 1;
+      }
+      h1 {
+        font-size: 72px;
+        font-weight: 700;
+        margin-bottom: 20px;
+        color: #f1f5f9;
+        line-height: 1.1;
+      }
+      h1 span {
+        color: #a855f7;
+        background: linear-gradient(120deg, #7c3aed, #a855f7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .slide-title {
+        font-size: 48px;
+        font-weight: 600;
+        margin-bottom: 40px;
+        width: 100%;
+        border-bottom: 1px solid #1e293b;
+        padding-bottom: 20px;
+        color: #f1f5f9;
+      }
+      p,
+      li {
+        color: #cbd5e1;
+        font-size: 20px;
+        line-height: 1.6;
+      }
+      code {
+        font-family: "JetBrains Mono", monospace;
+        background: #1e293b;
+        color: #a855f7;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+      pre {
+        background: #020617;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+        overflow-x: auto;
+        font-family: "JetBrains Mono", monospace;
+        color: #e2e8f0;
+        font-size: 16px;
+      }
+      .two-column {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 60px;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+      }
+      .tile {
+        background-color: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 30px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- TITLE SLIDE -->
+    <div class="slide-wrapper">
+      <div class="slide-container">
+        <div style="text-align: center; width: 100%">
+          <div style="font-size: 80px; color: #a855f7; margin-bottom: 20px">
+            <i class="fa-solid fa-layer-group"></i>
+          </div>
+          <h1>React.js KT<br /><span>Module 2: Architecture</span></h1>
+          <p style="color: #94a3b8; font-size: 24px">
+            Patterns, State Management & TypeScript
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1. PROP DRILLING & CONTEXT -->
+    <div class="slide-wrapper">
+      <div class="slide-container">
+        <h2 class="slide-title">The "Prop Drilling" Problem</h2>
+        <div class="two-column">
+          <div>
+            <p>
+              Passing data through 10 layers of components just to reach the
+              bottom one is messy. This is called "Prop Drilling".
+            </p>
+            <div class="tile" style="margin-top: 20px; border-color: #a855f7">
+              <h3>The Solution: Context API</h3>
+              <p>
+                Context allows you to "teleport" data. You wrap a section of
+                your app in a <strong>Provider</strong>, and any component
+                inside can <strong>Consume</strong> that data directly.
+              </p>
+            </div>
+          </div>
+          <div>
+            <pre>
+// 1. Create
+const UserContext = createContext();
+
+// 2. Provide
+&lt;UserContext.Provider value={user}&gt;
+   &lt;Dashboard /&gt;
+&lt;/UserContext.Provider&gt;
+
+// 3. Consume (Deep inside Dashboard)
+const user = useContext(UserContext);
+</pre
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. CUSTOM HOOKS -->
+    <div class="slide-wrapper">
+      <div class="slide-container">
+        <h2 class="slide-title">Reusable Logic: Custom Hooks</h2>
+        <div class="two-column">
+          <div>
+            <p>
+              If you find yourself copying and pasting
+              <code>useEffect</code> code between components, you should extract
+              it into a <strong>Custom Hook</strong>.
+            </p>
+            <p style="margin-top: 20px">
+              Custom Hooks are just JS functions that start with
+              <code>use</code>. They can call other hooks.
+            </p>
+            <ul>
+              <li><code>useFetch</code></li>
+              <li><code>useWindowSize</code></li>
+              <li><code>useAuth</code></li>
+            </ul>
+          </div>
+          <div>
+            <pre>
+// useWindowWidth.js
+function useWindowWidth() {
+  const [width, setWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    const handleResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeListener('resize', handleResize);
+  }, []);
+
+  return width;
+}
+</pre
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. TYPESCRIPT -->
+    <div class="slide-wrapper">
+      <div class="slide-container">
+        <h2 class="slide-title">React + TypeScript</h2>
+        <div class="two-column">
+          <div>
+            <p>
+              JavaScript is loosely typed, which leads to "undefined is not a
+              function" crashes. TypeScript enforces rules on Props and State.
+            </p>
+            <div class="tile" style="margin-top: 20px">
+              <h3>Why use it?</h3>
+              <p>
+                It acts as live documentation. You know exactly what props a
+                component requires just by hovering over it.
+              </p>
+            </div>
+          </div>
+          <div>
+            <pre>
+interface ButtonProps {
+  label: string;
+  onClick: () => void;
+  // Optional prop
+  variant?: 'primary' | 'secondary'; 
+}
+
+const Button = ({ label, onClick }: ButtonProps) => {
+  return &lt;button onClick={onClick}&gt;{label}&lt;/button&gt;
+}
+</pre
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. OPTIMIZATION -->
+    <div class="slide-wrapper">
+      <div class="slide-container">
+        <h2 class="slide-title">Performance: Memoization</h2>
+        <div class="two-column">
+          <div>
+            <p>
+              React re-renders components frequently. Sometimes, calculations
+              are expensive.
+            </p>
+            <p>
+              We use <strong>Memoization</strong> to cache results so we don't
+              recalculate them unless necessary.
+            </p>
+          </div>
+          <div class="tile">
+            <h3 style="color: #a855f7">useMemo</h3>
+            <p>
+              Caches a <strong>value</strong> (e.g., filtering a list of 10,000
+              items).
+            </p>
+            <code style="display: block; margin-top: 10px"
+              >const sorted = useMemo(() => list.sort(), [list])</code
+            >
+
+            <h3 style="color: #a855f7; margin-top: 20px">useCallback</h3>
+            <p>
+              Caches a <strong>function definition</strong>. Useful when passing
+              functions to children to prevent them from re-rendering.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
