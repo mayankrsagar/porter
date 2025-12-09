@@ -1,5 +1,10 @@
 // src/pages/Booking.jsx
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   Autocomplete,
@@ -7,9 +12,9 @@ import {
   GoogleMap,
   Marker,
   useJsApiLoader,
-} from "@react-google-maps/api";
+} from '@react-google-maps/api';
 
-import { API_BASE_URL } from "../services/api";
+import { apiFetch } from '../services/api';
 
 const GOOGLE_MAPS_LIBRARIES = ["places"];
 const DEFAULT_CENTER = { lat: 19.076, lng: 72.8777 };
@@ -23,11 +28,11 @@ export default function Booking() {
 
   const [form, setForm] = useState({
     pickupAddress: "",
-    pickupLat: "",
-    pickupLng: "",
+    pickupLat: null, // number | null
+    pickupLng: null, // number | null
     dropAddress: "",
-    dropLat: "",
-    dropLng: "",
+    dropLat: null,
+    dropLng: null,
     name: "",
     phone: "",
     vehicleType: "mini-truck",
@@ -103,21 +108,18 @@ export default function Booking() {
     }));
   }
 
-  const handleMapClick = useCallback(
-    (e) => {
-      const lat = e.latLng?.lat();
-      const lng = e.latLng?.lng();
-      if (typeof lat !== "number" || typeof lng !== "number") return;
+  const handleMapClick = useCallback((e) => {
+    const lat = e.latLng?.lat();
+    const lng = e.latLng?.lng();
+    if (typeof lat !== "number" || typeof lng !== "number") return;
 
-      setForm((prev) => {
-        if (!prev.pickupLat && !prev.pickupLng) {
-          return { ...prev, pickupLat: lat, pickupLng: lng };
-        }
-        return { ...prev, dropLat: lat, dropLng: lng };
-      });
-    },
-    [setForm]
-  );
+    setForm((prev) => {
+      if (prev.pickupLat == null && prev.pickupLng == null) {
+        return { ...prev, pickupLat: lat, pickupLng: lng };
+      }
+      return { ...prev, dropLat: lat, dropLng: lng };
+    });
+  }, []);
 
   function haversineDistance(lat1, lon1, lat2, lon2) {
     const toRad = (v) => (v * Math.PI) / 180;
@@ -194,7 +196,7 @@ export default function Booking() {
       baseFare,
       distance: Math.round(distanceKm * 100) / 100,
       totalAmount: Math.round(total * 100) / 100,
-      currency: "USD",
+      currency: "INR",
     };
   }
 
@@ -322,27 +324,20 @@ export default function Booking() {
         pricing,
       };
 
-      const res = await fetch(`${API_BASE_URL}/orders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      // ✅ use axios wrapper instead of fetch
+      const body = await apiFetch("/orders", {
+        method: "post",
+        body: payload,
       });
-
-      const body = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          body?.error || `Error creating booking (${res.status})`
-        );
-      }
 
       setStatus({ ok: true, msg: "Booking created successfully!", data: body });
       setForm({
         pickupAddress: "",
-        pickupLat: "",
-        pickupLng: "",
+        pickupLat: null,
+        pickupLng: null,
         dropAddress: "",
-        dropLat: "",
-        dropLng: "",
+        dropLat: null,
+        dropLng: null,
         name: "",
         phone: "",
         vehicleType: "mini-truck",
@@ -355,7 +350,7 @@ export default function Booking() {
       setRouteDistanceKm(null);
     } catch (err) {
       console.error(err);
-      setStatus({ ok: false, msg: err.message });
+      setStatus({ ok: false, msg: err.message || "Failed to create booking" });
     } finally {
       setLoading(false);
     }
@@ -446,11 +441,13 @@ export default function Booking() {
                     📍 Current
                   </button>
                 </div>
-                {form.pickupLat && form.pickupLng && (
-                  <div className="text-xs text-slate-500 bg-slate-50 rounded-md px-3 py-1 inline-block">
-                    📍 {form.pickupLat.toFixed(5)}, {form.pickupLng.toFixed(5)}
-                  </div>
-                )}
+                {typeof form.pickupLat === "number" &&
+                  typeof form.pickupLng === "number" && (
+                    <div className="text-xs text-slate-500 bg-slate-50 rounded-md px-3 py-1 inline-block">
+                      📍 {form.pickupLat.toFixed(5)},{" "}
+                      {form.pickupLng.toFixed(5)}
+                    </div>
+                  )}
               </div>
 
               {/* Drop */}
@@ -494,11 +491,12 @@ export default function Booking() {
                     📍 Current
                   </button>
                 </div>
-                {form.dropLat && form.dropLng && (
-                  <div className="text-xs text-slate-500 bg-slate-50 rounded-md px-3 py-1 inline-block">
-                    📍 {form.dropLat.toFixed(5)}, {form.dropLng.toFixed(5)}
-                  </div>
-                )}
+                {typeof form.dropLat === "number" &&
+                  typeof form.dropLng === "number" && (
+                    <div className="text-xs text-slate-500 bg-slate-50 rounded-md px-3 py-1 inline-block">
+                      📍 {form.dropLat.toFixed(5)}, {form.dropLng.toFixed(5)}
+                    </div>
+                  )}
               </div>
             </div>
           </div>
@@ -654,7 +652,7 @@ export default function Booking() {
                   className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
                   value={form.phone}
                   onChange={(e) => setField("phone", e.target.value)}
-                  placeholder="+1 234 567 8900"
+                  placeholder="+91 98765 43210"
                 />
               </div>
             </div>
@@ -745,7 +743,7 @@ export default function Booking() {
           </div>
 
           {/* Submit Section */}
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
             <button
               type="submit"
               disabled={loading}
@@ -759,7 +757,7 @@ export default function Booking() {
 
             {status && (
               <div
-                className={`flex-1 px-4 py-3 rounded-lg border ${
+                className={`flex-1 px-4 py-3 rounded-lg border text-sm ${
                   status.ok
                     ? "bg-green-50 border-green-200 text-green-700"
                     : "bg-red-50 border-red-200 text-red-700"

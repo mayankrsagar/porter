@@ -1,6 +1,6 @@
 // controllers/driverController.js
-import Driver from "../models/Driver.js";
-import { io } from "../server.js";
+import Driver from '../models/Driver.js';
+import { io } from '../server.js';
 
 // Get all drivers
 export async function getDrivers(req, res) {
@@ -267,5 +267,35 @@ export async function getDriverLocationsForMap(req, res) {
     res.json(drivers);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+}
+
+// Get currently logged-in driver's profile based on req.user.email
+export async function getMyDriverProfile(req, res) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    // We expect User.email === Driver.personalInfo.email for the mapping
+    const email = (req.user.email || "").toLowerCase();
+
+    const driver = await Driver.findOne({
+      "personalInfo.email": email,
+    })
+      .populate("assignedVehicle", "registrationNumber type vehicleId status")
+      .populate(
+        "currentOrder",
+        "orderId status pickupLocation deliveryLocation"
+      );
+
+    if (!driver) {
+      return res.status(404).json({ error: "Driver profile not found" });
+    }
+
+    return res.json({ driver });
+  } catch (error) {
+    console.error("getMyDriverProfile error:", error);
+    return res.status(500).json({ error: error.message });
   }
 }

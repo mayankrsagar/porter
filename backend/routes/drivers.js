@@ -1,5 +1,5 @@
 // routes/driverRoutes.js
-import express from "express";
+import express from 'express';
 
 import {
   assignVehicleToDriver,
@@ -8,21 +8,29 @@ import {
   getDriverLocationsForMap,
   getDriverOverviewStats,
   getDrivers,
+  getMyDriverProfile,
   updateDriverLocation,
   updateDriverPerformance,
   updateDriverStatus,
-} from "../controllers/driverController.js";
+} from '../controllers/driverController.js';
+import { requireAuth } from '../middleware/auth.js';
+import { requireRole } from '../middleware/roles.js';
 
 const router = express.Router();
-
-// Order matters: specific paths first when needed,
-// but here all are fine in this order.
 
 router.get("/", getDrivers);
 router.get("/stats/overview", getDriverOverviewStats);
 router.get("/map/locations", getDriverLocationsForMap);
-router.get("/:id", getDriverById);
 
+// CURRENT DRIVER (protected)
+router.get(
+  "/me",
+  requireAuth,
+  requireRole("driver", "admin"),
+  getMyDriverProfile
+);
+
+router.get("/:id", getDriverById);
 router.post("/", createDriver);
 
 router.patch("/:id/status", updateDriverStatus);

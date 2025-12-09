@@ -1,7 +1,14 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
 const driverSchema = new mongoose.Schema(
   {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+      required: false, // initially optional; after migration you may make it required
+    },
+
     driverId: {
       type: String,
       required: true,

@@ -1,13 +1,21 @@
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import jwt from 'jsonwebtoken';
 
-import User from "../models/User.js";
-import cloudinary from "../utils/cloudinary.js";
+import User from '../models/User.js';
+import cloudinary, { deleteFromCloudinary } from '../utils/cloudinary.js';
 
 const createToken = (user) => {
   return jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
+};
+
+// Helper to safely delete local files
+const deleteLocalFile = (path) => {
+  if (fs.existsSync(path)) {
+    fs.unlinkSync(path);
+  }
 };
 
 export const register = async (req, res) => {
@@ -23,15 +31,33 @@ export const register = async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const userData = { name, email, password: hashed };
 
-    // If file was uploaded via multer, send to Cloudinary
+    // Handle avatar upload
     if (req.file) {
-      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-        folder: "porter/avatars",
-      });
-      userData.avatar = {
-        url: uploadResult.secure_url,
-        public_id: uploadResult.public_id,
-      };
+      try {
+        const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+          folder: "porter/avatars",
+          resource_type: "auto",
+          transformation: [
+            { width: 300, height: 300, crop: "fill", gravity: "face" },
+          ],
+        });
+
+        userData.avatar = {
+          url: uploadResult.secure_url,
+          public_id: uploadResult.public_id,
+        };
+
+        // Clean up local file AFTER successful upload
+        deleteLocalFile(req.file.path);
+      } catch (uploadError) {
+        // Clean up file even on upload failure
+        deleteLocalFile(req.file.path);
+        console.error("Cloudinary upload error:", uploadError);
+        return res.status(500).json({
+          message: "Avatar upload failed",
+          error: uploadError.message,
+        });
+      }
     }
 
     const user = await User.create(userData);
@@ -49,7 +75,13 @@ export const register = async (req, res) => {
     res.status(201).json({ user: safeUser });
   } catch (err) {
     console.error("Register error:", err);
-    res.status(500).json({ message: "Server error" });
+
+    // Clean up file if it exists
+    if (req.file) {
+      deleteLocalFile(req.file.path);
+    }
+
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
@@ -79,7 +111,7 @@ export const login = async (req, res) => {
     res.json({ user: safeUser });
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
@@ -89,7 +121,6 @@ export const logout = async (req, res) => {
 };
 
 export const getMe = async (req, res) => {
-  // requireAuth middleware attaches req.user
   res.json({ user: req.user });
 };
 
@@ -103,22 +134,39 @@ export const updateProfile = async (req, res) => {
     if (email) user.email = email;
     if (password) user.password = await bcrypt.hash(password, 10);
 
+    // Handle new avatar upload
     if (req.file) {
-      // remove previous avatar from Cloudinary if exists
+      // Delete old avatar from Cloudinary if it exists
       if (user.avatar?.public_id) {
-        try {
-          await cloudinary.uploader.destroy(user.avatar.public_id);
-        } catch (e) {
-          console.warn("Cloudinary destroy failed", e);
-        }
+        await deleteFromCloudinary(user.avatar.public_id);
       }
-      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-        folder: "porter/avatars",
-      });
-      user.avatar = {
-        url: uploadResult.secure_url,
-        public_id: uploadResult.public_id,
-      };
+
+      try {
+        // Upload new avatar
+        const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+          folder: "porter/avatars",
+          resource_type: "auto",
+          transformation: [
+            { width: 300, height: 300, crop: "fill", gravity: "face" },
+          ],
+        });
+
+        user.avatar = {
+          url: uploadResult.secure_url,
+          public_id: uploadResult.public_id,
+        };
+
+        // Clean up local file AFTER successful upload
+        deleteLocalFile(req.file.path);
+      } catch (uploadError) {
+        // Clean up file even on upload failure
+        deleteLocalFile(req.file.path);
+        console.error("Cloudinary upload error:", uploadError);
+        return res.status(500).json({
+          message: "Avatar upload failed",
+          error: uploadError.message,
+        });
+      }
     }
 
     await user.save();
@@ -127,6 +175,12 @@ export const updateProfile = async (req, res) => {
     res.json({ user: safeUser });
   } catch (err) {
     console.error("Update profile error:", err);
-    res.status(500).json({ message: "Server error" });
+
+    // Clean up file if it exists
+    if (req.file) {
+      deleteLocalFile(req.file.path);
+    }
+
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
