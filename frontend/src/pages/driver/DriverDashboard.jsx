@@ -1,11 +1,8 @@
 // src/pages/driver/DriverDashboard.jsx
-import React, {
-  useEffect,
-  useState,
-} from 'react';
+import React, { useEffect, useState } from "react";
 
-import { useAuth } from '../../context/AuthContext';
-import { apiFetch } from '../../services/api';
+import { useAuth } from "../../context/AuthContext";
+import { apiFetch } from "../../services/api";
 
 function StatusBadge({ status }) {
   const s = (status || "offline").toLowerCase();

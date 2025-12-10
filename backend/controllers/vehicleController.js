@@ -1,3 +1,4 @@
+import Driver from "../models/Driver.js";
 // controllers/vehicleController.js
 import Vehicle from "../models/Vehicle.js";
 import { io } from "../server.js";
@@ -237,5 +238,96 @@ export async function getVehicleLocationsForMap(req, res) {
     res.json(vehicles);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+}
+
+export async function listVehicles(req, res) {
+  try {
+    const { page = 1, limit = 50, q } = req.query;
+    const filter = {};
+    if (q) {
+      filter.$or = [
+        { registrationNumber: { $regex: q, $options: "i" } },
+        { type: { $regex: q, $options: "i" } },
+        { vehicleId: { $regex: q, $options: "i" } },
+      ];
+    }
+    const vehicles = await Vehicle.find(filter)
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+    const total = await Vehicle.countDocuments(filter);
+    res.json({
+      vehicles,
+      total,
+      currentPage: +page,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function createVehicle(req, res) {
+  try {
+    const payload = req.body;
+    const v = await Vehicle.create(payload);
+    io.to("fleet-updates").emit("vehicle-created", v);
+    res.status(201).json(v);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: err.message });
+  }
+}
+
+export async function updateVehicle(req, res) {
+  try {
+    const v = await Vehicle.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+    if (!v) return res.status(404).json({ error: "Vehicle not found" });
+    io.to("fleet-updates").emit("vehicle-updated", v);
+    res.json(v);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: err.message });
+  }
+}
+
+export async function deleteVehicle(req, res) {
+  try {
+    const v = await Vehicle.findByIdAndDelete(req.params.id);
+    if (!v) return res.status(404).json({ error: "Vehicle not found" });
+    io.to("fleet-updates").emit("vehicle-deleted", { id: req.params.id });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Optional: assign vehicle to driver /api/vehicles/:id/assign
+export async function assignVehicle(req, res) {
+  try {
+    const { driverId } = req.body;
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
+
+    vehicle.assignedDriver = driverId || null;
+    await vehicle.save();
+
+    if (driverId) {
+      const driver = await Driver.findById(driverId);
+      if (driver) {
+        driver.assignedVehicle = vehicle._id;
+        await driver.save();
+      }
+    }
+    io.to("fleet-updates").emit("vehicle-updated", vehicle);
+    res.json(vehicle);
+  } catch (err) {
+    console.error("assignVehicle error:", err);
+    res.status(400).json({ error: err.message });
   }
 }

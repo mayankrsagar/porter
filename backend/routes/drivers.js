@@ -1,5 +1,5 @@
 // routes/driverRoutes.js
-import express from 'express';
+import express from "express";
 
 import {
   assignVehicleToDriver,
@@ -12,9 +12,9 @@ import {
   updateDriverLocation,
   updateDriverPerformance,
   updateDriverStatus,
-} from '../controllers/driverController.js';
-import { requireAuth } from '../middleware/auth.js';
-import { requireRole } from '../middleware/roles.js';
+} from "../controllers/driverController.js";
+import { requireAuth } from "../middleware/auth.js";
+import { requireRole } from "../middleware/roles.js";
 
 const router = express.Router();
 
@@ -37,5 +37,19 @@ router.patch("/:id/status", updateDriverStatus);
 router.patch("/:id/location", updateDriverLocation);
 router.patch("/:id/assign-vehicle", assignVehicleToDriver);
 router.patch("/:id/performance", updateDriverPerformance);
+
+router.get("/jobs", requireAuth, requireRole("driver"), getAvailableJobs);
+router.post(
+  "/jobs/:orderId/accept",
+  requireAuth,
+  requireRole("driver"),
+  acceptJob
+);
+router.post(
+  "/jobs/:orderId/complete",
+  requireAuth,
+  requireRole("driver"),
+  completeJob
+);
 
 export default router;

@@ -25,4 +25,10 @@ router.patch("/:id/status", updateVehicleStatus);
 router.patch("/:id/location", updateVehicleLocation);
 router.patch("/:id/assign-driver", assignDriverToVehicle);
 
+// Admin only for create/update/delete/assign
+router.get("/", requireAuth, listVehicles);
+router.post("/", requireAuth, requireRole("admin"), createVehicle);
+router.patch("/:id", requireAuth, requireRole("admin"), updateVehicle);
+router.delete("/:id", requireAuth, requireRole("admin"), deleteVehicle);
+router.patch("/:id/assign", requireAuth, requireRole("admin"), assignVehicle);
 export default router;

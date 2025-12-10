@@ -1,23 +1,23 @@
-import 'dotenv/config';
+import "dotenv/config";
 
-import cookieParser from 'cookie-parser';
-import cors from 'cors';
-import express from 'express';
+import cookieParser from "cookie-parser";
+import cors from "cors";
+import express from "express";
 // ✅ Added: fs for tmp folder creation & auth routes
-import fs from 'fs';
-import http from 'http';
-import mongoose from 'mongoose';
-import path, { dirname } from 'path';
-import { Server } from 'socket.io';
-import { fileURLToPath } from 'url';
+import fs from "fs";
+import http from "http";
+import mongoose from "mongoose";
+import path, { dirname } from "path";
+import { Server } from "socket.io";
+import { fileURLToPath } from "url";
 
-import connectDB from './config/db.js';
-import adminRoutes from './routes/admin.js';
-import analyticsRouter from './routes/analytics.js';
-import authRoutes from './routes/auth.js';
-import driversRouter from './routes/drivers.js';
-import ordersRouter from './routes/orders.js';
-import vehiclesRouter from './routes/vehicles.js';
+import connectDB from "./config/db.js";
+import adminRoutes from "./routes/admin.js";
+import analyticsRouter from "./routes/analytics.js";
+import authRoutes from "./routes/auth.js";
+import driversRouter from "./routes/drivers.js";
+import ordersRouter from "./routes/orders.js";
+import vehiclesRouter from "./routes/vehicles.js";
 
 // Fix __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -100,6 +100,15 @@ io.on("connection", (socket) => {
   });
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
+  });
+  socket.on("join-driver-room", ({ userId }) =>
+    socket.join(`driver-${userId}`)
+  );
+  socket.on("join-fleet", () => socket.join("fleet-updates"));
+
+  socket.on("driver-location", (data) => {
+    // broadcast to fleet or interested clients
+    io.to("fleet-updates").emit("driver-location", data);
   });
 });
 
