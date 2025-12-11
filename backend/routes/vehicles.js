@@ -1,16 +1,22 @@
 // routes/vehicleRoutes.js
 import express from "express";
 
+import { assignVehicleToDriver } from "../controllers/driverController.js";
 import {
   assignDriverToVehicle,
   createVehicle,
+  deleteVehicle,
   getVehicleById,
   getVehicleLocationsForMap,
   getVehicleOverviewStats,
   getVehicles,
+  listVehicles,
+  updateVehicle,
   updateVehicleLocation,
   updateVehicleStatus,
 } from "../controllers/vehicleController.js";
+import { requireAuth } from "../middleware/auth.js";
+import { requireRole } from "../middleware/roles.js";
 
 const router = express.Router();
 
@@ -30,5 +36,10 @@ router.get("/", requireAuth, listVehicles);
 router.post("/", requireAuth, requireRole("admin"), createVehicle);
 router.patch("/:id", requireAuth, requireRole("admin"), updateVehicle);
 router.delete("/:id", requireAuth, requireRole("admin"), deleteVehicle);
-router.patch("/:id/assign", requireAuth, requireRole("admin"), assignVehicle);
+router.patch(
+  "/:id/assign",
+  requireAuth,
+  requireRole("admin"),
+  assignVehicleToDriver
+);
 export default router;

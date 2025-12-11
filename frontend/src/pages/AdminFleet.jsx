@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+// src/pages/admin/AdminFleet.jsx
+import React, { useEffect, useState } from "react";
 
-import { apiFetch } from "../services/api";
+import { apiFetch } from "../../services/api";
 
 export default function AdminFleet() {
   const [vehicles, setVehicles] = useState([]);
@@ -9,18 +10,18 @@ export default function AdminFleet() {
   const [form, setForm] = useState({
     registrationNumber: "",
     type: "mini-truck",
+    make: "",
+    model: "",
+    year: new Date().getFullYear(),
     capacityKg: 1000,
+    fuelType: "diesel",
   });
-
-  useEffect(() => {
-    load();
-  }, []);
 
   async function load() {
     setLoading(true);
     try {
       const res = await apiFetch("/vehicles");
-      setVehicles(res.vehicles || res);
+      setVehicles(res.vehicles || []);
     } catch (err) {
       console.error(err);
       alert("Failed to load vehicles");
@@ -29,19 +30,32 @@ export default function AdminFleet() {
     }
   }
 
+  useEffect(() => {
+    load();
+  }, []);
+
   async function createVehicle(e) {
     e.preventDefault();
     try {
+      // include fields required by schema
       await apiFetch("/vehicles", { method: "post", body: form });
       setOpenNew(false);
-      setForm({ registrationNumber: "", type: "mini-truck", capacityKg: 1000 });
+      setForm({
+        registrationNumber: "",
+        type: "mini-truck",
+        make: "",
+        model: "",
+        year: new Date().getFullYear(),
+        capacityKg: 1000,
+        fuelType: "diesel",
+      });
       load();
     } catch (err) {
       alert(err?.message || "Create failed");
     }
   }
 
-  async function removeVehicle(id) {
+  async function deleteVehicle(id) {
     if (!confirm("Delete vehicle?")) return;
     try {
       await apiFetch(`/vehicles/${id}`, { method: "delete" });
@@ -55,14 +69,12 @@ export default function AdminFleet() {
     <div className="max-w-6xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Fleet Management</h1>
-        <div>
-          <button
-            onClick={() => setOpenNew(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded"
-          >
-            Add vehicle
-          </button>
-        </div>
+        <button
+          onClick={() => setOpenNew(true)}
+          className="px-4 py-2 bg-indigo-600 text-white rounded"
+        >
+          Add vehicle
+        </button>
       </div>
 
       {loading ? (
@@ -72,31 +84,34 @@ export default function AdminFleet() {
           {vehicles.map((v) => (
             <div
               key={v._id}
-              className="bg-white p-3 rounded-lg shadow flex justify-between items-center"
+              className="bg-white p-3 rounded shadow flex justify-between items-center"
             >
               <div>
                 <div className="font-medium">{v.registrationNumber}</div>
                 <div className="text-sm text-slate-500">
-                  {v.type} • {v.status}
+                  {v.type} • {v.status} • {v.make} {v.model}
                 </div>
               </div>
               <div className="flex gap-2">
                 <button
-                  className="px-3 py-1 border rounded"
-                  onClick={() => {
-                    const newStatus =
-                      v.status === "available" ? "in-service" : "available";
+                  onClick={() =>
                     apiFetch(`/vehicles/${v._id}`, {
                       method: "patch",
-                      body: { status: newStatus },
-                    }).then(load);
-                  }}
+                      body: {
+                        status:
+                          v.status === "available"
+                            ? "maintenance"
+                            : "available",
+                      },
+                    }).then(load)
+                  }
+                  className="px-3 py-1 border rounded"
                 >
                   Toggle status
                 </button>
                 <button
+                  onClick={() => deleteVehicle(v._id)}
                   className="px-3 py-1 border rounded text-red-600"
-                  onClick={() => removeVehicle(v._id)}
                 >
                   Delete
                 </button>
@@ -106,7 +121,6 @@ export default function AdminFleet() {
         </div>
       )}
 
-      {/* New vehicle modal */}
       {openNew && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4">
           <div className="bg-white rounded-lg p-5 w-full max-w-md">
@@ -115,31 +129,57 @@ export default function AdminFleet() {
               <div>
                 <label className="text-sm">Registration number</label>
                 <input
+                  required
                   value={form.registrationNumber}
                   onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      registrationNumber: e.target.value,
-                    }))
+                    setForm({ ...form, registrationNumber: e.target.value })
                   }
                   className="w-full p-2 border rounded"
-                  required
                 />
               </div>
               <div>
                 <label className="text-sm">Type</label>
                 <select
                   value={form.type}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, type: e.target.value }))
-                  }
+                  onChange={(e) => setForm({ ...form, type: e.target.value })}
                   className="w-full p-2 border rounded"
                 >
-                  <option value="mini-truck">Mini Truck</option>
-                  <option value="van">Van</option>
-                  <option value="truck">Truck</option>
-                  <option value="pickup">Pickup</option>
+                  <option>mini-truck</option>
+                  <option>van</option>
+                  <option>truck</option>
+                  <option>pickup</option>
                 </select>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-sm">Make</label>
+                  <input
+                    value={form.make}
+                    onChange={(e) => setForm({ ...form, make: e.target.value })}
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm">Model</label>
+                  <input
+                    value={form.model}
+                    onChange={(e) =>
+                      setForm({ ...form, model: e.target.value })
+                    }
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm">Year</label>
+                  <input
+                    type="number"
+                    value={form.year}
+                    onChange={(e) =>
+                      setForm({ ...form, year: Number(e.target.value) })
+                    }
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-sm">Capacity (kg)</label>
@@ -147,10 +187,7 @@ export default function AdminFleet() {
                   type="number"
                   value={form.capacityKg}
                   onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      capacityKg: Number(e.target.value),
-                    }))
+                    setForm({ ...form, capacityKg: Number(e.target.value) })
                   }
                   className="w-full p-2 border rounded"
                 />

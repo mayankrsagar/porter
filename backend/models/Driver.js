@@ -1,143 +1,81 @@
 import mongoose from 'mongoose';
 
+function genDriverId() {
+  const r = Math.floor(Math.random() * 90000) + 10000;
+  return `DRV-${Date.now().toString(36)}-${r}`;
+}
+
 const driverSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       index: true,
-      required: false, // initially optional; after migration you may make it required
+      required: false,
     },
 
     driverId: {
       type: String,
       required: true,
       unique: true,
-      default: () =>
-        "DRV-" +
-        Date.now() +
-        "-" +
-        Math.random().toString(36).substr(2, 4).toUpperCase(),
+      default: genDriverId,
     },
+
     personalInfo: {
-      firstName: { type: String, required: true },
-      lastName: { type: String, required: true },
-      email: { type: String, required: true },
-      phone: { type: String, required: true },
-      dateOfBirth: Date,
-      address: {
-        street: String,
-        city: String,
-        state: String,
-        zipCode: String,
-        country: { type: String, default: "US" },
-      },
-      emergencyContact: {
-        name: String,
-        phone: String,
-        relationship: String,
-      },
+      firstName: { type: String, trim: true },
+      lastName: { type: String, trim: true },
+      email: { type: String, lowercase: true, trim: true, index: true },
+      phone: { type: String, trim: true, index: true },
     },
+
     license: {
-      number: { type: String, required: true },
-      type: { type: String, required: true },
-      issueDate: Date,
-      expiryDate: Date,
-      state: String,
-      restrictions: [String],
+      number: { type: String, trim: true, index: true },
+      expiry: { type: Date },
+      issuedBy: { type: String, trim: true },
     },
-    documents: [
-      {
-        type: {
-          type: String,
-          enum: ["license", "id", "medical", "training", "background"],
-        },
-        documentNumber: String,
-        issueDate: Date,
-        expiryDate: Date,
-        status: {
-          type: String,
-          enum: ["valid", "expired", "pending"],
-          default: "valid",
-        },
-      },
-    ],
+
     status: {
       type: String,
-      enum: ["available", "busy", "offline", "suspended"],
-      default: "available",
+      enum: ["active", "inactive", "suspended", "busy", "offline"],
+      default: "inactive",
+      index: true,
     },
-    currentLocation: {
-      coordinates: {
-        lat: { type: Number, default: 0 },
-        lng: { type: Number, default: 0 },
-      },
-      lastUpdated: { type: Date, default: Date.now },
-    },
+
     assignedVehicle: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Vehicle",
+      required: false,
     },
+
     currentOrder: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
+      required: false,
     },
+
+    currentLocation: {
+      type: { type: String, enum: ["Point"], default: "Point" },
+      coordinates: { type: [Number], default: [0, 0] }, // [lng, lat]
+    },
+
     performance: {
-      totalDeliveries: { type: Number, default: 0 },
-      totalDistance: { type: Number, default: 0 },
-      averageRating: { type: Number, default: 0 },
-      onTimeDeliveries: { type: Number, default: 0 },
-      customerFeedback: [
-        {
-          orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
-          rating: Number,
-          comment: String,
-          date: { type: Date, default: Date.now },
-        },
-      ],
+      rating: { type: Number, min: 0, max: 5, default: 0 },
+      completedJobs: { type: Number, default: 0 },
+      cancelledJobs: { type: Number, default: 0 },
     },
-    availability: {
-      schedule: [
-        {
-          day: {
-            type: String,
-            enum: [
-              "monday",
-              "tuesday",
-              "wednesday",
-              "thursday",
-              "friday",
-              "saturday",
-              "sunday",
-            ],
-          },
-          startTime: String,
-          endTime: String,
-          available: { type: Boolean, default: true },
-        },
-      ],
-      preferredAreas: [String],
-      maxDistance: { type: Number, default: 50 },
+
+    meta: {
+      notes: { type: String },
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     },
-    earnings: {
-      totalEarnings: { type: Number, default: 0 },
-      thisWeek: { type: Number, default: 0 },
-      thisMonth: { type: Number, default: 0 },
-      commissionRate: { type: Number, default: 0.15 },
-    },
-    profileImage: String,
-    notes: String,
   },
   {
     timestamps: true,
   }
 );
 
-// Index for efficient querying
-// driverSchema.index({ driverId: 1 }); // Unique index
-driverSchema.index({ "personalInfo.phone": 1 });
-driverSchema.index({ status: 1 });
-driverSchema.index({ "license.number": 1 });
+// Geo index for location if used
+driverSchema.index({ currentLocation: "2dsphere" });
 
 const Driver = mongoose.models.Driver || mongoose.model("Driver", driverSchema);
 

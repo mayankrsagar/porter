@@ -1,9 +1,9 @@
 // frontend/src/pages/admin/CreateDriver.jsx
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 
-import { apiFetch } from '../../services/api';
+import { apiFetch } from "../../services/api";
 
 export default function AdminCreateDriver() {
   const [name, setName] = useState("");
@@ -14,6 +14,7 @@ export default function AdminCreateDriver() {
   const [vehicleId, setVehicleId] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [avatarFile, setAvatarFile] = useState(null);
+  const [generatedPassword, setGeneratedPassword] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -25,6 +26,7 @@ export default function AdminCreateDriver() {
     e.preventDefault();
     setError(null);
     setMsg(null);
+    setGeneratedPassword(null);
 
     if (!name.trim() || !email.trim()) {
       setError("Name and email are required.");
@@ -50,10 +52,7 @@ export default function AdminCreateDriver() {
 
       // res = { message, user, driver, plainPassword? }
       setMsg(res.message || "Driver created");
-      // optionally show generated password (if present)
-      if (res.plainPassword) {
-        setMsg((prev) => `${prev}. Generated password: ${res.plainPassword}`);
-      }
+      setGeneratedPassword(res.plainPassword || null);
 
       // reset form or navigate to drivers list
       setName("");
@@ -64,9 +63,7 @@ export default function AdminCreateDriver() {
       setVehicleId("");
       setVehicleNumber("");
       setAvatarFile(null);
-
-      // navigate to drivers index (if you have one)
-      // nav("/admin/drivers");
+      setError(null);
     } catch (err) {
       console.error("Create driver error:", err);
       setError(err?.message || err?.data?.message || "Failed to create driver");
@@ -101,6 +98,7 @@ export default function AdminCreateDriver() {
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                type="email"
                 className="mt-1 w-full p-2 border rounded"
                 placeholder="driver@example.com"
               />
@@ -119,9 +117,6 @@ export default function AdminCreateDriver() {
                 className="mt-1 w-full p-2 border rounded"
                 placeholder="Leave blank to auto-generate"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                If left empty a random password will be generated.
-              </p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700">Phone</label>
@@ -129,7 +124,7 @@ export default function AdminCreateDriver() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="mt-1 w-full p-2 border rounded"
-                placeholder="+91 98765 43210"
+                placeholder="9876543210"
               />
             </div>
           </div>
@@ -143,7 +138,7 @@ export default function AdminCreateDriver() {
                 value={licenseNumber}
                 onChange={(e) => setLicenseNumber(e.target.value)}
                 className="mt-1 w-full p-2 border rounded"
-                placeholder="DL123456789"
+                placeholder="LIC-1234"
               />
             </div>
             <div>
@@ -154,18 +149,13 @@ export default function AdminCreateDriver() {
                 value={vehicleNumber}
                 onChange={(e) => setVehicleNumber(e.target.value)}
                 className="mt-1 w-full p-2 border rounded"
-                placeholder="KA01AB1234 or vehicle id"
+                placeholder="Vehicle number"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                You can provide vehicleId or vehicle number to assign a vehicle.
-              </p>
             </div>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-gray-700">
-              Avatar (optional)
-            </label>
+            <label className="text-sm font-medium text-gray-700">Avatar</label>
             <input
               type="file"
               accept="image/*"
@@ -174,8 +164,32 @@ export default function AdminCreateDriver() {
             />
           </div>
 
-          {error && <div className="text-sm text-red-600">{error}</div>}
+          {error && (
+            <div className="text-sm text-red-600">
+              {typeof error === "string"
+                ? error
+                : error.message || JSON.stringify(error)}
+            </div>
+          )}
           {msg && <div className="text-sm text-green-700">{msg}</div>}
+          {generatedPassword && (
+            <div className="mt-2 p-3 bg-yellow-50 border border-yellow-100 rounded text-sm">
+              <strong>Generated password:</strong>
+              <div className="mt-1">
+                <code className="px-2 py-1 bg-white border rounded">
+                  {generatedPassword}
+                </code>
+                <button
+                  onClick={() =>
+                    navigator.clipboard?.writeText(generatedPassword)
+                  }
+                  className="ml-2 px-2 py-1 text-xs rounded border"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-3">
             <button
@@ -200,6 +214,7 @@ export default function AdminCreateDriver() {
                 setAvatarFile(null);
                 setError(null);
                 setMsg(null);
+                setGeneratedPassword(null);
               }}
               className="px-3 py-2 border rounded"
             >

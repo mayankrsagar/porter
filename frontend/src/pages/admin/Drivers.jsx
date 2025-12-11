@@ -1,3 +1,4 @@
+// frontend/src/pages/admin/Drivers.jsx
 import React, {
   useEffect,
   useMemo,
@@ -54,14 +55,15 @@ export default function AdminDriversPage() {
     notes: "",
   });
 
+  // load drivers
   const load = async () => {
     setLoading(true);
     setError("");
+    setInfo("");
     try {
-      const res = await apiFetch("/admin/drivers", {
-        method: "get",
-      });
-      setDrivers(res.drivers || []);
+      const res = await apiFetch("/admin/drivers");
+      // API may return { drivers: [...] } or just array
+      setDrivers(res.drivers || res || []);
     } catch (err) {
       console.error("load drivers error:", err);
       setError(err?.message || "Failed to load drivers");
@@ -74,6 +76,7 @@ export default function AdminDriversPage() {
     load();
   }, []);
 
+  // filtering
   const filtered = useMemo(() => {
     let list = [...drivers];
     if (statusFilter !== "all") {
@@ -87,7 +90,7 @@ export default function AdminDriversPage() {
         const pi = d.personalInfo || {};
         const name = `${pi.firstName || ""} ${pi.lastName || ""}`.trim();
         return (
-          name.toLowerCase().includes(q) ||
+          (name || "").toLowerCase().includes(q) ||
           (pi.email || "").toLowerCase().includes(q) ||
           (pi.phone || "").toLowerCase().includes(q) ||
           (d.driverId || "").toLowerCase().includes(q)
@@ -97,6 +100,7 @@ export default function AdminDriversPage() {
     return list;
   }, [drivers, statusFilter, search]);
 
+  // editing helpers
   const startEdit = (driver) => {
     const pi = driver.personalInfo || {};
     setEditId(driver._id);
@@ -105,7 +109,7 @@ export default function AdminDriversPage() {
       lastName: pi.lastName || "",
       phone: pi.phone || "",
       status: driver.status || "available",
-      notes: driver.notes || "",
+      notes: driver.meta?.notes || "",
     });
     setInfo("");
     setError("");
@@ -139,7 +143,9 @@ export default function AdminDriversPage() {
         body,
       });
 
-      setDrivers((prev) => prev.map((d) => (d._id === id ? res.driver : d)));
+      // Update local list - API returns updated driver as res.driver (safe fallback)
+      const updated = res.driver || res;
+      setDrivers((prev) => prev.map((d) => (d._id === id ? updated : d)));
       setInfo("Driver updated");
       cancelEdit();
     } catch (err) {
@@ -150,6 +156,7 @@ export default function AdminDriversPage() {
     }
   };
 
+  // toggle suspended/active
   const toggleActive = async (driver) => {
     const id = driver._id;
     const nextStatus =
@@ -163,13 +170,39 @@ export default function AdminDriversPage() {
         method: "patch",
         body: { status: nextStatus },
       });
-      setDrivers((prev) => prev.map((d) => (d._id === id ? res.driver : d)));
+      const updated = res.driver || res;
+      setDrivers((prev) => prev.map((d) => (d._id === id ? updated : d)));
       setInfo(
         nextStatus === "suspended" ? "Driver deactivated" : "Driver activated"
       );
     } catch (err) {
       console.error("toggleActive error:", err);
       setError(err?.message || "Failed to update driver status");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // delete driver
+  const deleteDriver = async (id) => {
+    if (
+      !confirm(
+        "Are you sure you want to delete this driver? This action cannot be undone."
+      )
+    )
+      return;
+    setSavingId(id);
+    setError("");
+    setInfo("");
+    try {
+      await apiFetch(`/admin/drivers/${id}`, { method: "delete" });
+      setDrivers((prev) => prev.filter((d) => d._id !== id));
+      setInfo("Driver deleted");
+      // if currently editing deleted driver, cancel
+      if (editId === id) cancelEdit();
+    } catch (err) {
+      console.error("delete driver error:", err);
+      setError(err?.message || err?.data?.message || "Failed to delete driver");
     } finally {
       setSavingId(null);
     }
@@ -342,6 +375,7 @@ export default function AdminDriversPage() {
                           </div>
                         )}
                       </td>
+
                       <td className="px-4 py-3 hidden md:table-cell">
                         <div className="text-xs text-slate-700">
                           {pi.email || "—"}
@@ -363,6 +397,7 @@ export default function AdminDriversPage() {
                           />
                         )}
                       </td>
+
                       <td className="px-4 py-3 hidden md:table-cell">
                         <div className="text-xs text-slate-700">
                           {license.number || "—"}
@@ -371,6 +406,7 @@ export default function AdminDriversPage() {
                           {license.type || ""}
                         </div>
                       </td>
+
                       <td className="px-4 py-3">
                         {isEditing ? (
                           <select
@@ -391,6 +427,7 @@ export default function AdminDriversPage() {
                         ) : (
                           <StatusPill status={d.status} />
                         )}
+
                         {isEditing && (
                           <textarea
                             className="mt-2 w-full px-2 py-1 border rounded text-xs"
@@ -406,6 +443,7 @@ export default function AdminDriversPage() {
                           />
                         )}
                       </td>
+
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-1">
                           {isEditing ? (
@@ -432,6 +470,7 @@ export default function AdminDriversPage() {
                               Edit
                             </button>
                           )}
+
                           <button
                             disabled={savingId === d._id}
                             onClick={() => toggleActive(d)}
@@ -444,6 +483,14 @@ export default function AdminDriversPage() {
                             {d.status === "suspended"
                               ? "Activate"
                               : "Deactivate"}
+                          </button>
+
+                          <button
+                            disabled={savingId === d._id}
+                            onClick={() => deleteDriver(d._id)}
+                            className="px-2 py-1 text-xs rounded border bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+                          >
+                            Delete
                           </button>
                         </div>
                       </td>

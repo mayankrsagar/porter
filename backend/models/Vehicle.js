@@ -20,7 +20,7 @@ const vehicleSchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ["mini-truck", "pickup", "3-wheeler", "truck", "van"],
+      // enum: ["mini-truck", "pickup", "3-wheeler", "truck", "van"],
     },
     make: {
       type: String,

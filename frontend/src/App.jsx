@@ -1,4 +1,3 @@
-// src/App.jsx
 import {
   Route,
   Routes,
@@ -11,23 +10,25 @@ import Footer from './components/Footer';
 import Navigation from './components/Navigation';
 import Tracking from './components/Tracking';
 import { AuthProvider } from './context/AuthContext';
+import AdminPage from './pages/Admin';
 import AdminCreateDriver from './pages/admin/CreateDriver';
 import AdminDriversPage from './pages/admin/Drivers';
+import AnalyticsPage from './pages/Analytics';
 import DriverDashboard from './pages/driver/DriverDashboard';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import NotFound from './pages/NotFound';
+import OrdersPage from './pages/Orders';
 import Profile from './pages/Profile';
 import Register from './pages/Register';
+import VehiclesPage from './pages/Vehicles';
 import ProtectedRoute from './routes/ProtectedRoute';
-
-// import DriverDashboard from "./pages/driver/Dashboard"; // if you make one
 
 export default function App() {
   return (
     <AuthProvider>
       <div className="min-h-screen bg-slate-50 flex flex-col">
         <Navigation />
-        {/* <Header /> */}
         <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
           <Routes>
             {/* Public */}
@@ -35,7 +36,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
 
-            {/* Protected - general user/admin */}
+            {/* Protected */}
             <Route
               path="/dashboard"
               element={
@@ -77,7 +78,7 @@ export default function App() {
               }
             />
 
-            {/* Admin-only */}
+            {/* Admin */}
             <Route
               path="/admin/drivers"
               element={
@@ -95,7 +96,7 @@ export default function App() {
               }
             />
 
-            {/* Driver-only (if you build it later) */}
+            {/* Driver */}
             <Route
               path="/driver"
               element={
@@ -104,6 +105,41 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/orders"
+              element={
+                <ProtectedRoute roles={["user", "admin"]}>
+                  <OrdersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/vehicles"
+              element={
+                <ProtectedRoute roles={["user", "admin"]}>
+                  <VehiclesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute roles={["admin", "user"]}>
+                  <AnalyticsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute roles={["admin"]}>
+                  <AdminPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
         <Footer />

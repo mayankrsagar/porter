@@ -1,14 +1,17 @@
-// routes/driverRoutes.js
 import express from "express";
 
 import {
+  acceptJob,
   assignVehicleToDriver,
+  completeJob,
   createDriver,
+  getAvailableJobs,
   getDriverById,
   getDriverLocationsForMap,
+  getDriverMe,
   getDriverOverviewStats,
   getDrivers,
-  getMyDriverProfile,
+  pickupJob,
   updateDriverLocation,
   updateDriverPerformance,
   updateDriverStatus,
@@ -19,25 +22,7 @@ import { requireRole } from "../middleware/roles.js";
 const router = express.Router();
 
 router.get("/", getDrivers);
-router.get("/stats/overview", getDriverOverviewStats);
-router.get("/map/locations", getDriverLocationsForMap);
-
-// CURRENT DRIVER (protected)
-router.get(
-  "/me",
-  requireAuth,
-  requireRole("driver", "admin"),
-  getMyDriverProfile
-);
-
-router.get("/:id", getDriverById);
-router.post("/", createDriver);
-
-router.patch("/:id/status", updateDriverStatus);
-router.patch("/:id/location", updateDriverLocation);
-router.patch("/:id/assign-vehicle", assignVehicleToDriver);
-router.patch("/:id/performance", updateDriverPerformance);
-
+router.get("/me", requireAuth, requireRole("driver"), getDriverMe); // driver-only
 router.get("/jobs", requireAuth, requireRole("driver"), getAvailableJobs);
 router.post(
   "/jobs/:orderId/accept",
@@ -46,10 +31,28 @@ router.post(
   acceptJob
 );
 router.post(
+  "/jobs/:orderId/picked-up",
+  requireAuth,
+  requireRole("driver"),
+  pickupJob
+); // optional
+router.post(
   "/jobs/:orderId/complete",
   requireAuth,
   requireRole("driver"),
   completeJob
 );
+
+// existing endpoints
+router.get("/stats/overview", getDriverOverviewStats);
+router.get("/map/locations", getDriverLocationsForMap);
+router.get("/:id", getDriverById);
+
+router.post("/", createDriver);
+
+router.patch("/:id/status", updateDriverStatus);
+router.patch("/:id/location", updateDriverLocation);
+router.patch("/:id/assign-vehicle", assignVehicleToDriver);
+router.patch("/:id/performance", updateDriverPerformance);
 
 export default router;
