@@ -1,16 +1,15 @@
 import Customer from "../models/Customer.js";
 import Driver from "../models/Driver.js";
-// controllers/analyticsController.js
 import Order from "../models/Order.js";
 import Vehicle from "../models/Vehicle.js";
 
 export async function getDashboard(req, res) {
   try {
     const { period = "7d" } = req.query;
-
-    let dateFilter = {};
     const now = new Date();
 
+    // --- Build date filter (used by some detailed aggregations below) ---
+    let dateFilter = {};
     switch (period) {
       case "24h":
         dateFilter.createdAt = {
@@ -34,6 +33,62 @@ export async function getDashboard(req, res) {
         break;
     }
 
+    // -------------------------
+    // Lightweight summary (fast, simple aggregations)
+    // -------------------------
+    const last30Date = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // total orders (all time)
+    const totalOrdersAgg = await Order.aggregate([
+      { $group: { _id: null, totalOrders: { $sum: 1 } } },
+    ]);
+    const totalOrders = totalOrdersAgg[0]?.totalOrders || 0;
+
+    // orders in last 30 days
+    const ordersLast30d = await Order.countDocuments({
+      createdAt: { $gte: last30Date },
+    });
+
+    // vehicles counts
+    const vehiclesTotal = await Vehicle.countDocuments();
+    const vehiclesActive = await Vehicle.countDocuments({
+      status: "available",
+    });
+
+    // drivers counts
+    const driversTotal = await Driver.countDocuments();
+    const driversActive = await Driver.countDocuments({ status: "active" });
+
+    // revenue (sum of delivered orders totalAmount) - all time
+    const revenueAgg = await Order.aggregate([
+      { $match: { status: "delivered" } },
+      { $group: { _id: null, totalRevenue: { $sum: "$pricing.totalAmount" } } },
+    ]);
+    const revenue = revenueAgg[0]?.totalRevenue || 0;
+
+    // currency - try to find a recent order's pricing.currency or fallback
+    const lastOrderWithCurrency = await Order.findOne(
+      { "pricing.currency": { $exists: true } },
+      { "pricing.currency": 1 }
+    )
+      .sort({ createdAt: -1 })
+      .lean();
+    const currency = lastOrderWithCurrency?.pricing?.currency || "₹";
+
+    const summary = {
+      orders: totalOrders,
+      ordersLast30d,
+      vehicles: vehiclesTotal,
+      vehiclesActive,
+      drivers: driversTotal,
+      driversActive,
+      revenue,
+      currency,
+    };
+
+    // -------------------------
+    // Detailed analytics (keep your existing complex aggregations)
+    // -------------------------
     const orderStats = await Order.aggregate([
       { $match: dateFilter },
       {
@@ -73,12 +128,7 @@ export async function getDashboard(req, res) {
 
     const ordersByStatus = await Order.aggregate([
       { $match: dateFilter },
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 },
-        },
-      },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
 
     const ordersByVehicleType = await Order.aggregate([
@@ -125,21 +175,11 @@ export async function getDashboard(req, res) {
     ]);
 
     const fleetStats = await Vehicle.aggregate([
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 },
-        },
-      },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
 
     const driverStats = await Driver.aggregate([
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 },
-        },
-      },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
 
     const customerStats = await Customer.aggregate([
@@ -155,7 +195,9 @@ export async function getDashboard(req, res) {
       },
     ]);
 
+    // Respond with both the lightweight summary (for top-cards) and full analytics payload
     res.json({
+      summary, // <- frontend-friendly flattened numbers
       overview: {
         orders: orderStats[0] || {
           totalOrders: 0,
@@ -177,6 +219,7 @@ export async function getDashboard(req, res) {
       driverStatus: driverStats,
     });
   } catch (error) {
+    console.error("getDashboard error:", error);
     res.status(500).json({ error: error.message });
   }
 }

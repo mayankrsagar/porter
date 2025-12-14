@@ -1,9 +1,10 @@
 // frontend/src/pages/Login.jsx
-import { useState } from 'react';
+import { useEffect, useState } from "react";
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 
-import { apiFetch } from '../services/api';
+import { useAuth } from "../context/AuthContext";
+import { apiFetch } from "../services/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -11,7 +12,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
+  const auth = useAuth();
   const nav = useNavigate();
 
   const isEmailValid = (em) =>
@@ -19,6 +20,13 @@ export default function Login() {
 
   const canSubmit =
     isEmailValid(email) && password.trim().length >= 1 && !loading;
+
+  // FIXED: Add auth.user to dependencies to catch async auth state changes
+  useEffect(() => {
+    if (auth.user) {
+      nav("/", { replace: true });
+    }
+  }, [auth.user]); // ← Add this dependency
 
   const submit = async (e) => {
     e.preventDefault();
@@ -37,7 +45,6 @@ export default function Login() {
       });
 
       console.log("logged in", data);
-      // httpOnly cookie is set by backend
       nav("/", { replace: true });
     } catch (err) {
       const message =
@@ -223,7 +230,6 @@ function BackgroundDecor() {
         className="absolute right-0 top-0 -mr-40 -mt-24 w-[600px] h-[600px] opacity-28"
         viewBox="0 0 600 600"
         fill="none"
-        xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
           <linearGradient id="g2" x1="0" x2="1">
@@ -238,7 +244,6 @@ function BackgroundDecor() {
         className="absolute left-0 bottom-0 -ml-40 -mb-24 w-[500px] h-[500px] opacity-20"
         viewBox="0 0 600 600"
         fill="none"
-        xmlns="http://www.w3.org/2000/svg"
       >
         <circle
           cx="200"

@@ -1,14 +1,20 @@
 // frontend/src/components/Fleet.jsx
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 
-import { apiFetch } from '../services/api';
+import { apiFetch } from "../services/api";
+
+function normalizeStatusRaw(status) {
+  if (!status && status !== 0) return "unknown";
+  if (typeof status === "string") return status;
+  if (typeof status === "object") {
+    return status.status || status.state || status.name || "unknown";
+  }
+  return String(status);
+}
 
 function StatusPill({ status }) {
-  const s = (status || "unknown").toLowerCase();
+  const raw = normalizeStatusRaw(status);
+  const s = (raw || "unknown").toLowerCase();
   const map = {
     available: "bg-green-100 text-green-800",
     busy: "bg-indigo-100 text-indigo-800",
@@ -19,24 +25,83 @@ function StatusPill({ status }) {
   };
   const cls = map[s] || map.unknown;
 
+  const dotCls =
+    s === "available"
+      ? "bg-green-500"
+      : s === "busy" || s === "assigned"
+      ? "bg-indigo-500"
+      : s === "maintenance"
+      ? "bg-yellow-500"
+      : "bg-slate-400";
+
+  const display = raw ? String(raw) : "Unknown";
+
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}
     >
-      <span
-        className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-          s === "available"
-            ? "bg-green-500"
-            : s === "busy" || s === "assigned"
-            ? "bg-indigo-500"
-            : s === "maintenance"
-            ? "bg-yellow-500"
-            : "bg-slate-400"
-        }`}
-      />
-      {status || "Unknown"}
+      <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${dotCls}`} />
+      {display}
     </span>
   );
+}
+
+function safeString(val) {
+  if (val === null || val === undefined) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  if (Array.isArray(val)) return val.map((v) => safeString(v)).join(", ");
+  if (typeof val === "object") {
+    // prefer common keys
+    if ("name" in val) return String(val.name);
+    if ("address" in val) return String(val.address);
+    if ("vehicleNumber" in val) return String(val.vehicleNumber);
+    if ("number" in val) return String(val.number);
+    // fallback to a compact representation
+    try {
+      return JSON.stringify(val);
+    } catch {
+      return String(val);
+    }
+  }
+  return String(val);
+}
+
+function formatCapacity(cap) {
+  if (cap === null || cap === undefined) return null;
+  if (typeof cap === "object") {
+    const parts = [];
+    if (cap.weight != null) parts.push(`${cap.weight}`);
+    if (cap.volume != null) parts.push(`${cap.volume}`);
+    // include any other simple keys (height/length) if present
+    const other = Object.keys(cap).filter(
+      (k) => !["weight", "volume"].includes(k)
+    );
+    other.forEach((k) => {
+      const v = cap[k];
+      if (v != null && (typeof v === "string" || typeof v === "number"))
+        parts.push(`${v}`);
+    });
+    if (parts.length > 0) return parts.join(" / ");
+    // fallback
+    return safeString(cap);
+  }
+  return String(cap);
+}
+
+function formatLocation(loc) {
+  if (!loc && loc !== 0) return "Location not available";
+  if (typeof loc === "string") return loc;
+  if (typeof loc === "object") {
+    // prefer address or label-like fields
+    if (loc.address) return String(loc.address);
+    if (loc.label) return String(loc.label);
+    if (loc.name) return String(loc.name);
+    // maybe lat/lng present
+    if (loc.lat != null && loc.lng != null) return `${loc.lat}, ${loc.lng}`;
+    return safeString(loc);
+  }
+  return String(loc);
 }
 
 function SkeletonCard() {
@@ -86,7 +151,7 @@ export default function Fleet() {
     const total = vehicles.length;
     const byStatus = vehicles.reduce(
       (acc, v) => {
-        const s = (v.status || "unknown").toLowerCase();
+        const s = normalizeStatusRaw(v.status).toLowerCase();
         if (s === "available") acc.available += 1;
         else if (s === "busy" || s === "assigned") acc.busy += 1;
         else if (s === "maintenance") acc.maintenance += 1;
@@ -103,21 +168,26 @@ export default function Fleet() {
 
     if (statusFilter !== "all") {
       list = list.filter(
-        (v) => (v.status || "").toLowerCase() === statusFilter.toLowerCase()
+        (v) =>
+          normalizeStatusRaw(v.status).toLowerCase() ===
+          statusFilter.toLowerCase()
       );
     }
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((v) => {
-        const driverName =
-          v.driverName || v.driver?.name || v.assignedDriver?.name || "";
-        const vehicleNumber = v.vehicleNumber || v.plate || v.number || "";
-        const type = v.type || v.category || "";
+        const driverName = safeString(
+          v.driverName || v.driver?.name || v.assignedDriver?.name || ""
+        ).toLowerCase();
+        const vehicleNumber = safeString(
+          v.vehicleNumber || v.plate || v.number || ""
+        ).toLowerCase();
+        const type = safeString(v.type || v.category || "").toLowerCase();
         return (
-          driverName.toLowerCase().includes(q) ||
-          vehicleNumber.toLowerCase().includes(q) ||
-          type.toLowerCase().includes(q)
+          driverName.includes(q) ||
+          vehicleNumber.includes(q) ||
+          type.includes(q)
         );
       });
     }
@@ -266,19 +336,19 @@ export default function Fleet() {
           {filteredVehicles.map((v) => {
             const id = v._id || v.id || v.vehicleId;
             const driverName =
-              v.driverName ||
-              v.driver?.name ||
-              v.assignedDriver?.name ||
-              "Unassigned";
-            const vehicleNumber = v.vehicleNumber || v.plate || v.number || "—";
-            const type = v.type || v.category || "Vehicle";
+              safeString(
+                v.driverName || v.driver?.name || v.assignedDriver?.name
+              ) || "Unassigned";
+            const vehicleNumber =
+              safeString(v.vehicleNumber || v.plate || v.number) || "—";
+            const type = safeString(v.type || v.category) || "Vehicle";
             const capacity = v.capacity || v.loadCapacity || v.maxLoad || null;
             const currentLoad = v.currentLoad || v.load || null;
             const location =
               v.lastLocation?.address ||
               v.location?.address ||
               v.location ||
-              "Location not available";
+              null;
 
             return (
               <div
@@ -308,7 +378,7 @@ export default function Fleet() {
                     <span className="mr-3">
                       Capacity:{" "}
                       <span className="font-medium text-gray-700">
-                        {capacity}
+                        {formatCapacity(capacity)}
                       </span>
                     </span>
                   )}
@@ -316,7 +386,7 @@ export default function Fleet() {
                     <span>
                       Load:{" "}
                       <span className="font-medium text-gray-700">
-                        {currentLoad}
+                        {formatCapacity(currentLoad)}
                       </span>
                     </span>
                   )}
@@ -324,7 +394,9 @@ export default function Fleet() {
 
                 <div className="text-xs text-gray-500 mt-1">
                   Last known location:{" "}
-                  <span className="font-medium text-gray-700">{location}</span>
+                  <span className="font-medium text-gray-700">
+                    {formatLocation(location)}
+                  </span>
                 </div>
               </div>
             );

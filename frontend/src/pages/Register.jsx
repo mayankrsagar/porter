@@ -1,12 +1,10 @@
 // frontend/src/pages/Register.jsx
-import {
-  useEffect,
-  useState,
-} from 'react';
+import { useEffect, useState } from "react";
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 
-import { apiFetch } from '../services/api';
+import { useAuth } from "../context/AuthContext";
+import { apiFetch } from "../services/api";
 
 /**
  * Register page for Porter
@@ -22,7 +20,7 @@ export default function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
+  const auth = useAuth();
   const nav = useNavigate();
 
   // Create preview URL for selected avatar and clean up on unmount/change
@@ -35,6 +33,12 @@ export default function Register() {
     setAvatarPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [avatarFile]);
+
+  useEffect(() => {
+    if (auth.user) {
+      nav("/");
+    }
+  }, [auth.user, nav]);
 
   // simple email regex for client-side validation
   const isEmailValid = (em) =>
