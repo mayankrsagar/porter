@@ -1,6 +1,6 @@
-// controllers/orderController.js
-import Order from "../models/Order.js";
-import { io } from "../server.js";
+import Driver from '../models/Driver.js';
+import Order from '../models/Order.js';
+import { io } from '../server.js';
 
 // Get all orders with filtering
 export async function getOrders(req, res) {
@@ -298,5 +298,164 @@ export async function getOrderOverviewStats(req, res) {
     );
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+}
+
+/* keep other functions unchanged... */
+
+// Accept a job
+export async function acceptJob(req, res) {
+  try {
+    const driverUser = req.user; // a User doc (see auth middleware)
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    if (order.status !== "pending") {
+      return res
+        .status(400)
+        .json({ error: "Order not available for acceptance" });
+    }
+
+    // Find the Driver document linked to this user
+    const driver = await Driver.findOne({ user: driverUser._id });
+    if (!driver)
+      return res
+        .status(404)
+        .json({ error: "Driver profile not found for this user" });
+
+    // Assign driver (use Driver._id)
+    order.status = "assigned";
+    order.assignedDriver = driver._id;
+    // add timeline entry
+    order.timeline = order.timeline || [];
+    order.timeline.push({
+      status: "assigned",
+      location: order.pickupLocation?.address,
+      notes: `Assigned to driver ${driver.driverId}`,
+      timestamp: new Date(),
+    });
+
+    await order.save();
+
+    // update driver record
+    driver.currentOrder = order._id;
+    driver.status = "busy";
+    await driver.save();
+
+    io.to("fleet-updates").emit("order-assigned", {
+      orderId: order._id,
+      driverId: driver._id,
+    });
+    io.to(`driver-${driverUser._id}`).emit("job-assigned", { order });
+
+    res.json({ order, driver });
+  } catch (err) {
+    console.error("acceptJob error:", err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Mark job as picked up
+export async function pickupJob(req, res) {
+  try {
+    const driverUser = req.user;
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    // ensure assigned driver is the driver for this user
+    const driver = await Driver.findOne({ user: driverUser._id });
+    if (!driver)
+      return res.status(404).json({ error: "Driver profile not found" });
+
+    if (
+      !order.assignedDriver ||
+      String(order.assignedDriver) !== String(driver._id)
+    ) {
+      return res
+        .status(403)
+        .json({ error: "This order is not assigned to you" });
+    }
+
+    order.status = "picked-up";
+    // add timeline entry
+    order.timeline = order.timeline || [];
+    order.timeline.push({
+      status: "picked-up",
+      location: order.pickupLocation?.address,
+      notes: "Package picked up",
+      timestamp: new Date(),
+    });
+
+    await order.save();
+
+    io.to("fleet-updates").emit("order-picked-up", {
+      orderId: order._id,
+      driverId: driver._id,
+    });
+    io.to(`driver-${driverUser._id}`).emit("job-picked-up", { order });
+
+    res.json({ order });
+  } catch (err) {
+    console.error("pickupJob error:", err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Complete a job
+export async function completeJob(req, res) {
+  try {
+    const driverUser = req.user;
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    const driver = await Driver.findOne({ user: driverUser._id });
+    if (!driver)
+      return res.status(404).json({ error: "Driver profile not found" });
+
+    if (
+      !order.assignedDriver ||
+      String(order.assignedDriver) !== String(driver._id)
+    ) {
+      return res
+        .status(403)
+        .json({ error: "This order is not assigned to you" });
+    }
+
+    order.status = "delivered";
+    order.actualDeliveryTime = new Date();
+    order.timeline = order.timeline || [];
+    order.timeline.push({
+      status: "delivered",
+      location: order.deliveryLocation?.address || "",
+      notes: "Delivered",
+      timestamp: new Date(),
+    });
+
+    await order.save();
+
+    // Update driver
+    driver.currentOrder = null;
+    driver.status = "active"; // driver becomes active again
+    driver.performance = driver.performance || {};
+    driver.performance.completedJobs =
+      (driver.performance.completedJobs || 0) + 1;
+    await driver.save();
+
+    io.to("fleet-updates").emit("order-delivered", {
+      orderId: order._id,
+      driverId: driver._id,
+    });
+    io.to(`driver-${driverUser._id}`).emit("job-completed", { order });
+
+    res.json({ order, driver });
+  } catch (err) {
+    console.error("completeJob error:", err);
+    res.status(500).json({ error: err.message });
   }
 }

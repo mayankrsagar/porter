@@ -1,9 +1,14 @@
-// controllers/driverController.js
-import Driver from "../models/Driver.js";
-import Order from "../models/Order.js";
-import { io } from "../server.js";
+// backend/controllers/driverController.js
+import Driver from '../models/Driver.js';
+import { io } from '../server.js';
 
-// ==================== ADMIN & MANAGEMENT ENDPOINTS ====================
+/**
+ * Driver controller — fixes:
+ * - enforce admin check for createDriver (recommended)
+ * - align performance fields with schema (completedJobs, cancelledJobs, rating)
+ * - status consistency: use active/inactive/busy/offline/suspended
+ * - defensive checks and initializations
+ */
 
 // Get all drivers with pagination
 export async function getDrivers(req, res) {
@@ -13,7 +18,7 @@ export async function getDrivers(req, res) {
     const limitNum = parseInt(limit, 10) || 20;
 
     const filter = {};
-    if (status) filter.status = status;
+    if (status && status !== "all") filter.status = status;
     const drivers = await Driver.find(filter)
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
@@ -21,7 +26,7 @@ export async function getDrivers(req, res) {
         "driverId personalInfo.firstName personalInfo.lastName status currentLocation assignedVehicle currentOrder"
       );
 
-    res.json(drivers);
+    res.json({ drivers });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -33,8 +38,9 @@ export async function getDriverMe(req, res) {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    const email = (req.user.email || "").toLowerCase();
-    const driver = await Driver.findOne({ "personalInfo.email": email })
+    // req.user is a User document (see auth middleware). Drivers are linked via Driver.user -> User._id
+    const userId = req.user._id;
+    const driver = await Driver.findOne({ user: userId })
       .populate("assignedVehicle", "registrationNumber type vehicleId status")
       .populate(
         "currentOrder",
@@ -45,7 +51,7 @@ export async function getDriverMe(req, res) {
       return res.status(404).json({ error: "Driver profile not found" });
     }
 
-    res.json(driver);
+    res.json({ driver });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -62,15 +68,22 @@ export async function getDriverById(req, res) {
       return res.status(404).json({ error: "Driver not found" });
     }
 
-    res.json(driver);
+    res.json({ driver });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 }
 
-// Create new driver
+// Create new driver (admin-only)
+// Note: you already have adminController.createDriver — keep that as canonical.
+// This function enforces admin check if accidentally called directly.
 export async function createDriver(req, res) {
   try {
+    // Require authenticated admin (routes should already enforce but double-check)
+    if (!req.user || req.user.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden: admin only" });
+    }
+
     const payload = req.body || {};
 
     // Basic normalization
@@ -80,20 +93,27 @@ export async function createDriver(req, res) {
         .trim();
     }
     if (payload.personalInfo && payload.personalInfo.phone) {
-      payload.personalInfo.phone = (payload.personalInfo.phone + "").trim();
+      payload.personalInfo.phone = String(payload.personalInfo.phone).trim();
+    }
+
+    // Basic required fields
+    const firstName =
+      payload.personalInfo?.firstName || payload.firstName || payload.name;
+    if (!firstName) {
+      return res.status(400).json({ error: "Driver first name is required" });
     }
 
     // Prevent duplicate by email or phone
-    const dupFilter = {};
-    if (payload.personalInfo && payload.personalInfo.email) {
-      dupFilter["personalInfo.email"] = payload.personalInfo.email;
+    const dupQueries = [];
+    if (payload.personalInfo?.email) {
+      dupQueries.push({ "personalInfo.email": payload.personalInfo.email });
     }
-    if (payload.personalInfo && payload.personalInfo.phone) {
-      dupFilter["personalInfo.phone"] = payload.personalInfo.phone;
+    if (payload.personalInfo?.phone) {
+      dupQueries.push({ "personalInfo.phone": payload.personalInfo.phone });
     }
 
-    if (Object.keys(dupFilter).length) {
-      const existing = await Driver.findOne(dupFilter).lean();
+    if (dupQueries.length) {
+      const existing = await Driver.findOne({ $or: dupQueries }).lean();
       if (existing) {
         return res.status(409).json({
           error: "Driver with same email or phone already exists",
@@ -102,19 +122,35 @@ export async function createDriver(req, res) {
       }
     }
 
-    const driver = new Driver(payload);
+    // Ensure sensible defaults that match schema
+    const driverData = {
+      personalInfo: {
+        firstName: payload.personalInfo?.firstName || firstName,
+        lastName: payload.personalInfo?.lastName || payload.lastName || "",
+        email: payload.personalInfo?.email || "",
+        phone: payload.personalInfo?.phone || "",
+      },
+      license: payload.license || {},
+      status: payload.status || "inactive", // admin could override if needed
+      assignedVehicle: payload.assignedVehicle || null,
+      currentOrder: null,
+      meta: {
+        createdBy: req.user._id,
+        notes: payload.meta?.notes || "",
+      },
+    };
+
+    // create driver
+    const driver = new Driver(driverData);
     await driver.save();
 
     io.to("fleet-updates").emit("driver-created", driver);
-    res.status(201).json(driver);
+    res.status(201).json({ driver });
   } catch (error) {
     console.error("createDriver error:", error);
-    // Return Mongoose validation messages when available
     if (error && error.name === "ValidationError") {
       const details = {};
-      for (const k in error.errors) {
-        details[k] = error.errors[k].message;
-      }
+      for (const k in error.errors) details[k] = error.errors[k].message;
       return res.status(400).json({ error: "Validation failed", details });
     }
     res.status(500).json({ error: error.message || String(error) });
@@ -131,10 +167,22 @@ export async function updateDriverStatus(req, res) {
       return res.status(404).json({ error: "Driver not found" });
     }
 
-    driver.status = status;
+    // Validate status belongs to allowed enum (optional)
+    const allowed = ["active", "inactive", "suspended", "busy", "offline"];
+    if (status && !allowed.includes(status)) {
+      return res
+        .status(400)
+        .json({ error: `Invalid status. Allowed: ${allowed.join(", ")}` });
+    }
+
+    if (status) driver.status = status;
     if (location) {
       driver.currentLocation = {
-        ...location,
+        coordinates:
+          location.coordinates ||
+          driver.currentLocation?.coordinates ||
+          driver.currentLocation,
+        address: location.address || driver.currentLocation?.address,
         lastUpdated: new Date(),
       };
     }
@@ -147,7 +195,7 @@ export async function updateDriverStatus(req, res) {
     await driver.populate("currentOrder", "orderId status");
 
     io.to("fleet-updates").emit("driver-updated", driver);
-    res.json(driver);
+    res.json({ driver });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -159,13 +207,11 @@ export async function updateDriverLocation(req, res) {
     const { coordinates, address } = req.body;
 
     const driver = await Driver.findById(req.params.id);
-    if (!driver) {
-      return res.status(404).json({ error: "Driver not found" });
-    }
+    if (!driver) return res.status(404).json({ error: "Driver not found" });
 
     driver.currentLocation = {
-      coordinates,
-      address,
+      coordinates: coordinates || driver.currentLocation?.coordinates || [0, 0],
+      address: address || driver.currentLocation?.address || "",
       lastUpdated: new Date(),
     };
 
@@ -181,23 +227,21 @@ export async function updateDriverLocation(req, res) {
       location: driver.currentLocation,
     });
 
-    res.json(driver);
+    res.json({ driver });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 }
 
-// Assign vehicle to driver
+// Assign vehicle to driver (admin)
 export async function assignVehicleToDriver(req, res) {
   try {
     const { vehicleId } = req.body;
 
     const driver = await Driver.findById(req.params.id);
-    if (!driver) {
-      return res.status(404).json({ error: "Driver not found" });
-    }
+    if (!driver) return res.status(404).json({ error: "Driver not found" });
 
-    driver.assignedVehicle = vehicleId;
+    driver.assignedVehicle = vehicleId || null;
     await driver.save();
 
     await driver.populate(
@@ -207,7 +251,7 @@ export async function assignVehicleToDriver(req, res) {
     await driver.populate("currentOrder", "orderId status");
 
     io.to("fleet-updates").emit("driver-updated", driver);
-    res.json(driver);
+    res.json({ driver });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -216,29 +260,43 @@ export async function assignVehicleToDriver(req, res) {
 // Update driver performance metrics
 export async function updateDriverPerformance(req, res) {
   try {
-    const { deliveryCompleted, rating, distance } = req.body;
+    const { deliveryCompleted, rating, distance, cancelled } = req.body;
 
     const driver = await Driver.findById(req.params.id);
-    if (!driver) {
-      return res.status(404).json({ error: "Driver not found" });
-    }
+    if (!driver) return res.status(404).json({ error: "Driver not found" });
+
+    // Ensure performance object exists and fields are numbers
+    driver.performance = driver.performance || {};
+    driver.performance.completedJobs = Number(
+      driver.performance.completedJobs || 0
+    );
+    driver.performance.cancelledJobs = Number(
+      driver.performance.cancelledJobs || 0
+    );
+    driver.performance.totalDistance = Number(
+      driver.performance.totalDistance || 0
+    );
+    driver.performance.rating = Number(driver.performance.rating || 0);
 
     if (deliveryCompleted) {
-      driver.performance.totalDeliveries += 1;
-      driver.performance.totalDistance += distance || 0;
-      driver.performance.onTimeDeliveries += 1;
+      driver.performance.completedJobs += 1;
+      driver.performance.totalDistance += Number(distance || 0);
     }
 
-    if (rating) {
-      const totalRatings = driver.performance.customerFeedback.length;
-      const currentTotal = driver.performance.averageRating * totalRatings;
-      driver.performance.averageRating =
-        (currentTotal + rating) / (totalRatings + 1);
+    if (cancelled) {
+      driver.performance.cancelledJobs += 1;
+    }
 
-      driver.performance.customerFeedback.push({
-        rating,
-        date: new Date(),
-      });
+    if (rating != null) {
+      // Simple running average approach: convert to a naive average if counts not stored
+      // If you later add ratingCount, replace with exact average formula
+      const prevAvg = Number(driver.performance.rating || 0);
+      const prevCount = Number(driver.performance.ratingCount || 0) || 0;
+      const newCount = prevCount + 1;
+      driver.performance.rating =
+        (prevAvg * prevCount + Number(rating)) / newCount;
+      driver.performance.ratingCount = newCount;
+      // optionally push to feedback array if you add it to schema later
     }
 
     await driver.save();
@@ -249,7 +307,7 @@ export async function updateDriverPerformance(req, res) {
     await driver.populate("currentOrder", "orderId status");
 
     io.to("fleet-updates").emit("driver-updated", driver);
-    res.json(driver);
+    res.json({ driver });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -263,8 +321,8 @@ export async function getDriverOverviewStats(req, res) {
         $group: {
           _id: null,
           totalDrivers: { $sum: 1 },
-          availableDrivers: {
-            $sum: { $cond: [{ $eq: ["$status", "available"] }, 1, 0] },
+          activeDrivers: {
+            $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
           },
           busyDrivers: {
             $sum: { $cond: [{ $eq: ["$status", "busy"] }, 1, 0] },
@@ -275,8 +333,8 @@ export async function getDriverOverviewStats(req, res) {
           suspendedDrivers: {
             $sum: { $cond: [{ $eq: ["$status", "suspended"] }, 1, 0] },
           },
-          averageRating: { $avg: "$performance.averageRating" },
-          totalDeliveries: { $sum: "$performance.totalDeliveries" },
+          averageRating: { $avg: "$performance.rating" },
+          totalCompletedJobs: { $sum: "$performance.completedJobs" },
         },
       },
     ]);
@@ -284,12 +342,12 @@ export async function getDriverOverviewStats(req, res) {
     res.json(
       stats[0] || {
         totalDrivers: 0,
-        availableDrivers: 0,
+        activeDrivers: 0,
         busyDrivers: 0,
         offlineDrivers: 0,
         suspendedDrivers: 0,
         averageRating: 0,
-        totalDeliveries: 0,
+        totalCompletedJobs: 0,
       }
     );
   } catch (error) {
@@ -301,9 +359,8 @@ export async function getDriverOverviewStats(req, res) {
 export async function getDriverLocationsForMap(req, res) {
   try {
     const drivers = await Driver.find({
-      status: { $in: ["available", "busy"] },
-      "currentLocation.coordinates.lat": { $ne: 0 },
-      "currentLocation.coordinates.lng": { $ne: 0 },
+      status: { $in: ["active", "busy"] }, // changed from 'available' to 'active'
+      "currentLocation.coordinates.0": { $exists: true },
     })
       .populate("assignedVehicle", "registrationNumber type vehicleId status")
       .populate(
@@ -314,174 +371,8 @@ export async function getDriverLocationsForMap(req, res) {
         "driverId personalInfo.firstName personalInfo.lastName status currentLocation assignedVehicle currentOrder"
       );
 
-    res.json(drivers);
+    res.json({ drivers });
   } catch (error) {
     res.status(500).json({ error: error.message });
-  }
-}
-
-// ==================== DRIVER MOBILE APP ENDPOINTS ====================
-
-// Get current driver's profile
-export async function getMyDriverProfile(req, res) {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const email = (req.user.email || "").toLowerCase();
-    const driver = await Driver.findOne({ "personalInfo.email": email })
-      .populate("assignedVehicle", "registrationNumber type vehicleId status")
-      .populate(
-        "currentOrder",
-        "orderId status pickupLocation deliveryLocation"
-      );
-
-    if (!driver) {
-      return res.status(404).json({ error: "Driver profile not found" });
-    }
-
-    res.json({ driver });
-  } catch (error) {
-    console.error("getMyDriverProfile error:", error);
-    res.status(500).json({ error: error.message });
-  }
-}
-
-// Get available jobs for drivers
-export async function getAvailableJobs(req, res) {
-  try {
-    const jobs = await Order.find({ status: "pending" })
-      .sort({ createdAt: 1 })
-      .limit(50)
-      .lean();
-
-    res.json({ jobs });
-  } catch (err) {
-    console.error("getAvailableJobs error:", err);
-    res.status(500).json({ error: err.message });
-  }
-}
-
-// Accept a job
-export async function acceptJob(req, res) {
-  try {
-    const driverUser = req.user;
-    const { orderId } = req.params;
-
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ error: "Order not found" });
-
-    if (order.status !== "pending") {
-      return res
-        .status(400)
-        .json({ error: "Order not available for acceptance" });
-    }
-
-    order.status = "assigned";
-    order.assignedDriver = driverUser._id;
-    order.assignedAt = new Date();
-    await order.save();
-
-    const driver = await Driver.findOne({
-      "personalInfo.email": driverUser.email,
-    });
-    if (driver) {
-      driver.currentOrder = order._id;
-      driver.status = "busy";
-      await driver.save();
-    }
-
-    io.to("fleet-updates").emit("order-assigned", {
-      orderId: order._id,
-      driverId: driver?._id,
-    });
-    io.to(`driver-${driverUser._id}`).emit("job-assigned", { order });
-
-    res.json({ order, driver });
-  } catch (err) {
-    console.error("acceptJob error:", err);
-    res.status(500).json({ error: err.message });
-  }
-}
-
-// Mark job as picked up
-export async function pickupJob(req, res) {
-  try {
-    const driverUser = req.user;
-    const { orderId } = req.params;
-
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ error: "Order not found" });
-
-    if (
-      !order.assignedDriver ||
-      String(order.assignedDriver) !== String(driverUser._id)
-    ) {
-      return res
-        .status(403)
-        .json({ error: "This order is not assigned to you" });
-    }
-
-    order.status = "picked-up";
-    order.pickedUpAt = new Date();
-    await order.save();
-
-    io.to("fleet-updates").emit("order-picked-up", {
-      orderId: order._id,
-      driverId: driverUser._id,
-    });
-    io.to(`driver-${driverUser._id}`).emit("job-picked-up", { order });
-
-    res.json({ order });
-  } catch (err) {
-    console.error("pickupJob error:", err);
-    res.status(500).json({ error: err.message });
-  }
-}
-
-// Complete a job
-export async function completeJob(req, res) {
-  try {
-    const driverUser = req.user;
-    const { orderId } = req.params;
-
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ error: "Order not found" });
-
-    if (
-      !order.assignedDriver ||
-      String(order.assignedDriver) !== String(driverUser._id)
-    ) {
-      return res
-        .status(403)
-        .json({ error: "This order is not assigned to you" });
-    }
-
-    order.status = "delivered";
-    order.actualDeliveryTime = new Date();
-    await order.save();
-
-    const driver = await Driver.findOne({
-      "personalInfo.email": driverUser.email,
-    });
-    if (driver) {
-      driver.currentOrder = null;
-      driver.status = "available";
-      driver.performance.totalDeliveries =
-        (driver.performance.totalDeliveries || 0) + 1;
-      await driver.save();
-    }
-
-    io.to("fleet-updates").emit("order-delivered", {
-      orderId: order._id,
-      driverId: driver?._id,
-    });
-    io.to(`driver-${driverUser._id}`).emit("job-completed", { order });
-
-    res.json({ order, driver });
-  } catch (err) {
-    console.error("completeJob error:", err);
-    res.status(500).json({ error: err.message });
   }
 }

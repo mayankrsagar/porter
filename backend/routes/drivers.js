@@ -1,29 +1,73 @@
-import express from "express";
+// backend/routes/drivers.js
+import express from 'express';
 
 import {
-  acceptJob,
   assignVehicleToDriver,
-  completeJob,
   createDriver,
-  getAvailableJobs,
   getDriverById,
   getDriverLocationsForMap,
   getDriverMe,
   getDriverOverviewStats,
   getDrivers,
-  pickupJob,
   updateDriverLocation,
   updateDriverPerformance,
   updateDriverStatus,
-} from "../controllers/driverController.js";
-import { requireAuth } from "../middleware/auth.js";
-import { requireRole } from "../middleware/roles.js";
+} from '../controllers/driverController.js';
+// job actions belong to orderController
+import {
+  acceptJob,
+  completeJob,
+  pickupJob,
+} from '../controllers/orderController.js';
+import { requireAuth } from '../middleware/auth.js';
+import { requireRole } from '../middleware/roles.js';
 
 const router = express.Router();
 
+// Admin/management endpoints
 router.get("/", getDrivers);
-router.get("/me", requireAuth, requireRole("driver"), getDriverMe); // driver-only
-router.get("/jobs", requireAuth, requireRole("driver"), getAvailableJobs);
+router.get("/stats/overview", getDriverOverviewStats);
+router.get("/map/locations", getDriverLocationsForMap);
+router.get("/:id", getDriverById);
+
+// Admin-only create/update/delete live in /api/admin (router there)
+// If you want to keep an admin create here, ensure requireAuth + requireRole
+router.post("/", requireAuth, requireRole("admin"), createDriver);
+
+router.patch(
+  "/:id/status",
+  requireAuth,
+  requireRole("admin"),
+  updateDriverStatus
+);
+router.patch(
+  "/:id/location",
+  requireAuth,
+  requireRole("admin"),
+  updateDriverLocation
+);
+router.patch(
+  "/:id/assign-vehicle",
+  requireAuth,
+  requireRole("admin"),
+  assignVehicleToDriver
+);
+router.patch(
+  "/:id/performance",
+  requireAuth,
+  requireRole("admin"),
+  updateDriverPerformance
+);
+
+// Driver mobile app endpoints (driver role)
+router.get("/me", requireAuth, requireRole("driver"), getDriverMe);
+router.get("/jobs", requireAuth, requireRole("driver"), async (req, res) => {
+  // you can forward to controller or place logic here
+  // kept for backward compatibility: call driverController.getAvailableJobs if you have it
+  res.status(204).end();
+});
+
+// Job lifecycle (driver-only)
 router.post(
   "/jobs/:orderId/accept",
   requireAuth,
@@ -35,24 +79,12 @@ router.post(
   requireAuth,
   requireRole("driver"),
   pickupJob
-); // optional
+);
 router.post(
   "/jobs/:orderId/complete",
   requireAuth,
   requireRole("driver"),
   completeJob
 );
-
-// existing endpoints
-router.get("/stats/overview", getDriverOverviewStats);
-router.get("/map/locations", getDriverLocationsForMap);
-router.get("/:id", getDriverById);
-
-router.post("/", createDriver);
-
-router.patch("/:id/status", updateDriverStatus);
-router.patch("/:id/location", updateDriverLocation);
-router.patch("/:id/assign-vehicle", assignVehicleToDriver);
-router.patch("/:id/performance", updateDriverPerformance);
 
 export default router;

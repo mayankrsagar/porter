@@ -26,7 +26,7 @@ export default function Login() {
     if (auth.user) {
       nav("/", { replace: true });
     }
-  }, [auth.user]); // ← Add this dependency
+  }, [auth.user]);
 
   const submit = async (e) => {
     e.preventDefault();
