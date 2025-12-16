@@ -1,6 +1,7 @@
-// backend/controllers/driverController.js
-import Driver from '../models/Driver.js';
-import { io } from '../server.js';
+import mongoose from "mongoose";
+
+import Driver from "../models/Driver.js";
+import { io } from "../server.js";
 
 /**
  * Driver controller — fixes:
@@ -57,10 +58,50 @@ export async function getDriverMe(req, res) {
   }
 }
 
-// Get single driver by ID
 export async function getDriverById(req, res) {
   try {
-    const driver = await Driver.findById(req.params.id)
+    const requested = req.params.id;
+
+    // If the client asked for "me", return the driver for the authenticated user
+    if (requested === "me") {
+      if (!req.user) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      // Prefer to lookup by linked user id if driver.user was set, otherwise fall back to email
+      const userId = req.user._id;
+      let driver = null;
+
+      if (userId) {
+        driver = await Driver.findOne({ user: userId })
+          .populate("assignedVehicle")
+          .populate("currentOrder")
+          .lean();
+      }
+
+      if (!driver) {
+        const email = (req.user.email || "").toLowerCase();
+        if (email) {
+          driver = await Driver.findOne({ "personalInfo.email": email })
+            .populate("assignedVehicle")
+            .populate("currentOrder")
+            .lean();
+        }
+      }
+
+      if (!driver) {
+        return res.status(404).json({ error: "Driver profile not found" });
+      }
+
+      return res.json(driver);
+    }
+
+    // For other ids ensure it's a valid ObjectId to avoid Mongoose casting exceptions
+    if (!mongoose.isValidObjectId(requested)) {
+      return res.status(400).json({ error: "Invalid driver id" });
+    }
+
+    const driver = await Driver.findById(requested)
       .populate("assignedVehicle")
       .populate("currentOrder");
 
@@ -68,8 +109,9 @@ export async function getDriverById(req, res) {
       return res.status(404).json({ error: "Driver not found" });
     }
 
-    res.json({ driver });
+    res.json(driver);
   } catch (error) {
+    console.error("getDriverById error:", error);
     res.status(500).json({ error: error.message });
   }
 }

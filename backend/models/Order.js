@@ -99,6 +99,17 @@ const orderSchema = new mongoose.Schema(
       driverRating: Number,
       feedback: String,
     },
+    assignedDriver: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Driver",
+      default: null,
+    },
+
+    assignedVehicle: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Vehicle",
+      default: null,
+    },
   },
   {
     timestamps: true,

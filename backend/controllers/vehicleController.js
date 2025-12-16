@@ -1,5 +1,6 @@
+import mongoose from "mongoose";
+
 import Driver from "../models/Driver.js";
-// controllers/vehicleController.js
 import Vehicle from "../models/Vehicle.js";
 import { io } from "../server.js";
 
@@ -157,36 +158,63 @@ export async function deleteVehicle(req, res) {
   }
 }
 
-// Assign driver to vehicle (bidirectional)
+/**
+ * Assign driver to vehicle. Accepts either Driver._id or Driver.driverId in body.driverId.
+ * Also keeps driver.assignedVehicle in sync.
+ */
 export async function assignDriverToVehicle(req, res) {
   try {
-    const { driverId } = req.body;
-    const vehicle = await Vehicle.findById(req.params.id);
+    const { driverId: driverInput } = req.body;
+    const vehicleId = req.params.id;
 
-    if (!vehicle) {
-      return res.status(404).json({ error: "Vehicle not found" });
+    const vehicle = await Vehicle.findById(vehicleId);
+    if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
+
+    let driver = null;
+    if (driverInput) {
+      if (mongoose.isValidObjectId(driverInput)) {
+        driver = await Driver.findById(driverInput);
+      }
+      if (!driver) driver = await Driver.findOne({ driverId: driverInput });
+      if (!driver) return res.status(404).json({ error: "Driver not found" });
     }
 
-    vehicle.assignedDriver = driverId || null;
+    // If vehicle already had an assignedDriver different than new one, clear old driver's assignedVehicle
+    if (
+      vehicle.assignedDriver &&
+      (!driver || String(vehicle.assignedDriver) !== String(driver._id))
+    ) {
+      try {
+        const oldDriver = await Driver.findById(vehicle.assignedDriver);
+        if (oldDriver) {
+          oldDriver.assignedVehicle = null;
+          await oldDriver.save();
+        }
+      } catch (e) {
+        console.warn("Failed to clear old driver.assignedVehicle", e.message);
+      }
+    }
+
+    vehicle.assignedDriver = driver ? driver._id : null;
     await vehicle.save();
 
-    if (driverId) {
-      const driver = await Driver.findById(driverId);
-      if (driver) {
-        driver.assignedVehicle = vehicle._id;
-        await driver.save();
-      }
+    // Set driver's assignedVehicle to this vehicle
+    if (driver) {
+      driver.assignedVehicle = vehicle._id;
+      await driver.save();
     }
 
     await vehicle.populate(
       "assignedDriver",
       "personalInfo.firstName personalInfo.lastName driverId status"
     );
+    await vehicle.populate("currentOrder", "orderId status");
+
     io.to("fleet-updates").emit("vehicle-updated", vehicle);
     res.json(vehicle);
   } catch (error) {
     console.error("assignDriverToVehicle error:", error);
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: error.message || String(error) });
   }
 }
 

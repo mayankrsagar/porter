@@ -1,4 +1,4 @@
-import { capitalise } from "../utils/capitalise";
+import { capitalise } from "../../utils/capitalise";
 
 export default function RoleBadge({ role }) {
   const map = {

@@ -1,11 +1,9 @@
-// frontend/src/pages/admin/Drivers.jsx
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 
-import { apiFetch } from '../../services/api';
+import { Link } from "react-router-dom";
+
+import { useAuth } from "../../context/AuthContext";
+import { apiFetch } from "../../services/api";
 
 const STATUS_OPTIONS = ["all", "available", "busy", "offline", "suspended"];
 
@@ -38,7 +36,204 @@ function StatusPill({ status }) {
   );
 }
 
+function CopyButton({ text, label = "Copy", small = false }) {
+  const [copied, setCopied] = useState(false);
+
+  const doCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text || "");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.error("copy failed", err);
+      setCopied(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={doCopy}
+      title={copied ? "Copied" : `Copy ${text || "value"}`}
+      className={`ml-2 inline-flex items-center gap-2 px-2 py-1 rounded text-xs border hover:bg-slate-50 ${
+        small ? "text-xs" : ""
+      }`}
+    >
+      <svg
+        className="w-3 h-3"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+      >
+        <rect x="9" y="9" width="13" height="13" rx="2" strokeWidth="1.5" />
+        <path
+          d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+          strokeWidth="1.5"
+        />
+      </svg>
+      <span>{copied ? "Copied" : label}</span>
+    </button>
+  );
+}
+
+function DriverRow({
+  driver,
+  onStartEdit,
+  onToggleActive,
+  onDelete,
+  savingId,
+  onSaveEdit,
+}) {
+  const pi = driver.personalInfo || {};
+  const name = `${pi.firstName || ""} ${pi.lastName || ""}`.trim() || "Unnamed";
+
+  return (
+    <tr key={driver._id} className="border-t border-slate-100 align-top">
+      <td className="px-4 py-3">
+        <div className="font-medium text-slate-800">{name}</div>
+        <div className="text-xs text-slate-500">
+          ID: {driver.driverId}
+          <CopyButton text={driver.driverId} label="Copy ID" small />
+        </div>
+        <div className="text-xs text-slate-500 mt-1">
+          Created:{" "}
+          {new Date(driver.createdAt || Date.now()).toLocaleDateString()}
+        </div>
+      </td>
+
+      <td className="px-4 py-3 hidden md:table-cell">
+        <div className="text-xs text-slate-700">{pi.email || "—"}</div>
+        <div className="text-xs text-slate-500">{pi.phone || "No phone"}</div>
+      </td>
+
+      <td className="px-4 py-3 hidden md:table-cell">
+        <div className="text-xs text-slate-700">
+          {driver.license?.number || "—"}
+        </div>
+        <div className="text-xs text-slate-500">
+          {driver.license?.type || ""}
+        </div>
+      </td>
+
+      <td className="px-4 py-3">
+        <StatusPill status={driver.status} />
+      </td>
+
+      <td className="px-4 py-3 text-right">
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={() => onStartEdit(driver)}
+            className="px-2 py-1 text-xs rounded border bg-white hover:bg-slate-50"
+          >
+            Edit
+          </button>
+
+          <button
+            disabled={savingId === driver._id}
+            onClick={() => onToggleActive(driver)}
+            className={`px-2 py-1 text-xs rounded border ${
+              driver.status === "suspended"
+                ? "text-green-700 border-green-200 bg-green-50 hover:bg-green-100"
+                : "text-red-700 border-red-200 bg-red-50 hover:bg-red-100"
+            } disabled:opacity-60`}
+          >
+            {driver.status === "suspended" ? "Activate" : "Deactivate"}
+          </button>
+
+          <button
+            disabled={savingId === driver._id}
+            onClick={() => onDelete(driver._id)}
+            className="px-2 py-1 text-xs rounded border bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+          >
+            Delete
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function EditForm({ driver, data, setData, onCancel, onSave, savingId }) {
+  return (
+    <tr className="bg-slate-50 border-t">
+      <td colSpan={5} className="px-4 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <input
+              className="w-full px-2 py-1 border rounded text-sm"
+              value={data.firstName}
+              onChange={(e) =>
+                setData((p) => ({ ...p, firstName: e.target.value }))
+              }
+              placeholder="First name"
+            />
+            <input
+              className="mt-2 w-full px-2 py-1 border rounded text-sm"
+              value={data.lastName}
+              onChange={(e) =>
+                setData((p) => ({ ...p, lastName: e.target.value }))
+              }
+              placeholder="Last name"
+            />
+          </div>
+
+          <div>
+            <input
+              className="w-full px-2 py-1 border rounded text-sm"
+              value={data.phone}
+              onChange={(e) =>
+                setData((p) => ({ ...p, phone: e.target.value }))
+              }
+              placeholder="Phone"
+            />
+            <input
+              className="mt-2 w-full px-2 py-1 border rounded text-sm"
+              value={data.notes}
+              onChange={(e) =>
+                setData((p) => ({ ...p, notes: e.target.value }))
+              }
+              placeholder="Notes"
+            />
+          </div>
+
+          <div>
+            <select
+              className="w-full px-2 py-1 border rounded text-sm"
+              value={data.status}
+              onChange={(e) =>
+                setData((p) => ({ ...p, status: e.target.value }))
+              }
+            >
+              <option value="available">Available</option>
+              <option value="busy">Busy</option>
+              <option value="offline">Offline</option>
+              <option value="suspended">Suspended</option>
+            </select>
+
+            <div className="mt-3 flex gap-2 justify-end">
+              <button
+                onClick={onCancel}
+                className="px-3 py-2 rounded border text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={savingId === driver._id}
+                onClick={() => onSave(driver._id)}
+                className="px-3 py-2 rounded bg-indigo-600 text-white text-sm disabled:opacity-60"
+              >
+                {savingId === driver._id ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export default function AdminDriversPage() {
+  const { user } = useAuth();
+
   const [drivers, setDrivers] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -62,7 +257,6 @@ export default function AdminDriversPage() {
     setInfo("");
     try {
       const res = await apiFetch("/admin/drivers");
-      // API may return { drivers: [...] } or just array
       setDrivers(res.drivers || res || []);
     } catch (err) {
       console.error("load drivers error:", err);
@@ -76,7 +270,6 @@ export default function AdminDriversPage() {
     load();
   }, []);
 
-  // filtering
   const filtered = useMemo(() => {
     let list = [...drivers];
     if (statusFilter !== "all") {
@@ -142,8 +335,6 @@ export default function AdminDriversPage() {
         method: "patch",
         body,
       });
-
-      // Update local list - API returns updated driver as res.driver (safe fallback)
       const updated = res.driver || res;
       setDrivers((prev) => prev.map((d) => (d._id === id ? updated : d)));
       setInfo("Driver updated");
@@ -175,6 +366,7 @@ export default function AdminDriversPage() {
       setInfo(
         nextStatus === "suspended" ? "Driver deactivated" : "Driver activated"
       );
+      if (editId === id) cancelEdit();
     } catch (err) {
       console.error("toggleActive error:", err);
       setError(err?.message || "Failed to update driver status");
@@ -198,7 +390,6 @@ export default function AdminDriversPage() {
       await apiFetch(`/admin/drivers/${id}`, { method: "delete" });
       setDrivers((prev) => prev.filter((d) => d._id !== id));
       setInfo("Driver deleted");
-      // if currently editing deleted driver, cancel
       if (editId === id) cancelEdit();
     } catch (err) {
       console.error("delete driver error:", err);
@@ -213,6 +404,16 @@ export default function AdminDriversPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Drivers</h1>
+          {user && user.role === "admin" && (
+            <div className="mt-3 flex gap-2">
+              <Link
+                to="/admin/drivers/create"
+                className="px-3 py-2 rounded bg-indigo-600 text-white text-sm"
+              >
+                Create driver
+              </Link>
+            </div>
+          )}
           <p className="text-sm text-slate-500">
             Manage driver accounts, statuses and basic details.
           </p>
@@ -328,175 +529,27 @@ export default function AdminDriversPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((d) => {
-                  const pi = d.personalInfo || {};
-                  const name = `${pi.firstName || ""} ${
-                    pi.lastName || ""
-                  }`.trim();
-                  const license = d.license || {};
-                  const isEditing = editId === d._id;
-
-                  return (
-                    <tr
-                      key={d._id}
-                      className="border-t border-slate-100 align-top"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-800">
-                          {name || "Unnamed"}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          ID: {d.driverId}
-                        </div>
-                        {isEditing && (
-                          <div className="mt-2 space-y-1">
-                            <input
-                              className="w-full px-2 py-1 border rounded text-xs"
-                              value={editData.firstName}
-                              onChange={(e) =>
-                                setEditData((prev) => ({
-                                  ...prev,
-                                  firstName: e.target.value,
-                                }))
-                              }
-                              placeholder="First name"
-                            />
-                            <input
-                              className="w-full px-2 py-1 border rounded text-xs"
-                              value={editData.lastName}
-                              onChange={(e) =>
-                                setEditData((prev) => ({
-                                  ...prev,
-                                  lastName: e.target.value,
-                                }))
-                              }
-                              placeholder="Last name"
-                            />
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <div className="text-xs text-slate-700">
-                          {pi.email || "—"}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {pi.phone || "No phone"}
-                        </div>
-                        {isEditing && (
-                          <input
-                            className="mt-2 w-full px-2 py-1 border rounded text-xs"
-                            value={editData.phone}
-                            onChange={(e) =>
-                              setEditData((prev) => ({
-                                ...prev,
-                                phone: e.target.value,
-                              }))
-                            }
-                            placeholder="Phone"
-                          />
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <div className="text-xs text-slate-700">
-                          {license.number || "—"}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {license.type || ""}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {isEditing ? (
-                          <select
-                            className="px-2 py-1 border rounded text-xs"
-                            value={editData.status}
-                            onChange={(e) =>
-                              setEditData((prev) => ({
-                                ...prev,
-                                status: e.target.value,
-                              }))
-                            }
-                          >
-                            <option value="available">Available</option>
-                            <option value="busy">Busy</option>
-                            <option value="offline">Offline</option>
-                            <option value="suspended">Suspended</option>
-                          </select>
-                        ) : (
-                          <StatusPill status={d.status} />
-                        )}
-
-                        {isEditing && (
-                          <textarea
-                            className="mt-2 w-full px-2 py-1 border rounded text-xs"
-                            rows={2}
-                            value={editData.notes}
-                            onChange={(e) =>
-                              setEditData((prev) => ({
-                                ...prev,
-                                notes: e.target.value,
-                              }))
-                            }
-                            placeholder="Internal notes"
-                          />
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          {isEditing ? (
-                            <div className="flex gap-2">
-                              <button
-                                disabled={savingId === d._id}
-                                onClick={() => saveEdit(d._id)}
-                                className="px-2 py-1 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
-                              >
-                                {savingId === d._id ? "Saving..." : "Save"}
-                              </button>
-                              <button
-                                onClick={cancelEdit}
-                                className="px-2 py-1 text-xs rounded border"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => startEdit(d)}
-                              className="px-2 py-1 text-xs rounded border bg-white hover:bg-slate-50"
-                            >
-                              Edit
-                            </button>
-                          )}
-
-                          <button
-                            disabled={savingId === d._id}
-                            onClick={() => toggleActive(d)}
-                            className={`px-2 py-1 text-xs rounded border ${
-                              d.status === "suspended"
-                                ? "text-green-700 border-green-200 bg-green-50 hover:bg-green-100"
-                                : "text-red-700 border-red-200 bg-red-50 hover:bg-red-100"
-                            } disabled:opacity-60`}
-                          >
-                            {d.status === "suspended"
-                              ? "Activate"
-                              : "Deactivate"}
-                          </button>
-
-                          <button
-                            disabled={savingId === d._id}
-                            onClick={() => deleteDriver(d._id)}
-                            className="px-2 py-1 text-xs rounded border bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                filtered.map((d) => (
+                  <React.Fragment key={d._id}>
+                    <DriverRow
+                      driver={d}
+                      onStartEdit={startEdit}
+                      onToggleActive={toggleActive}
+                      onDelete={deleteDriver}
+                      savingId={savingId}
+                    />
+                    {editId === d._id && (
+                      <EditForm
+                        driver={d}
+                        data={editData}
+                        setData={setEditData}
+                        onCancel={cancelEdit}
+                        onSave={saveEdit}
+                        savingId={savingId}
+                      />
+                    )}
+                  </React.Fragment>
+                ))
               )}
             </tbody>
           </table>

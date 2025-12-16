@@ -1,34 +1,34 @@
-import {
-  Route,
-  Routes,
-} from 'react-router-dom';
+import { Route, Routes } from "react-router-dom";
 
-import Booking from './components/Booking';
-import Dashboard from './components/Dashboard';
-import Fleet from './components/Fleet';
-import Footer from './components/Footer';
-import Navigation from './components/Navigation';
-import Tracking from './components/Tracking';
-import { AuthProvider } from './context/AuthContext';
-import AdminPage from './pages/Admin';
-import AdminCreateDriver from './pages/admin/CreateDriver';
-import AdminDriversPage from './pages/admin/Drivers';
-import AnalyticsPage from './pages/Analytics';
-import DriverDashboard from './pages/driver/DriverDashboard';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import NotFound from './pages/NotFound';
-import OrdersPage from './pages/Orders';
-import Profile from './pages/Profile';
-import Register from './pages/Register';
-import VehiclesPage from './pages/Vehicles';
-import ProtectedRoute from './routes/ProtectedRoute';
+import Booking from "./components/Booking";
+import Dashboard from "./components/Dashboard";
+import Fleet from "./components/Fleet";
+import Footer from "./components/Footer";
+import Header from "./components/Header";
+import Tracking from "./components/Tracking";
+import { AuthProvider } from "./context/AuthContext";
+import AdminPage from "./pages/Admin";
+import AdminCreateDriver from "./pages/admin/CreateDriver";
+import AdminDriversPage from "./pages/admin/Drivers";
+import AnalyticsPage from "./pages/Analytics";
+import DriverDashboard from "./pages/driver/DriverDashboard";
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import MyOrders from "./pages/MyOrders";
+import NotFound from "./pages/NotFound";
+import OrderDetailsPageInner from "./pages/OrderDetails";
+import OrdersPage from "./pages/Orders";
+import Profile from "./pages/Profile";
+import Register from "./pages/Register";
+import VehiclesPage from "./pages/Vehicles";
+import ProtectedRoute from "./routes/ProtectedRoute";
 
 export default function App() {
   return (
     <AuthProvider>
       <div className="min-h-screen bg-slate-50 flex flex-col">
-        <Navigation />
+        {/* <Navigation /> */}
+        <Header />
         <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
           <Routes>
             {/* Public */}
@@ -50,6 +50,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={["user", "admin"]}>
                   <Fleet />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/my-orders"
+              element={
+                <ProtectedRoute roles={["user"]}>
+                  <MyOrders />
                 </ProtectedRoute>
               }
             />
@@ -106,7 +114,7 @@ export default function App() {
               }
             />
             <Route
-              path="/orders"
+              path="/admin/orders"
               element={
                 <ProtectedRoute roles={["user", "admin"]}>
                   <OrdersPage />
@@ -114,7 +122,7 @@ export default function App() {
               }
             />
             <Route
-              path="/vehicles"
+              path="admin/vehicles"
               element={
                 <ProtectedRoute roles={["user", "admin"]}>
                   <VehiclesPage />
@@ -136,6 +144,10 @@ export default function App() {
                   <AdminPage />
                 </ProtectedRoute>
               }
+            />
+            <Route
+              path="/orders/:id"
+              element={<OrderDetailsPageInner />} // or element={<OrderDetailsPage />} depending on your export
             />
 
             {/* 404 */}

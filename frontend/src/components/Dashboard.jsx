@@ -1,13 +1,9 @@
 // frontend/src/components/Dashboard.jsx
-import React, {
-  useCallback,
-  useEffect,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useState } from "react";
 
-import { Link } from 'react-router-dom';
+import { Link } from "react-router-dom";
 
-import { apiFetch } from '../services/api';
+import { apiFetch } from "../services/api";
 
 function StatCard({ title, value, icon }) {
   return (
@@ -249,7 +245,7 @@ export default function Dashboard() {
             Recent orders
           </h2>
           <Link
-            to="/orders"
+            to="/admin/orders"
             className="text-sm text-indigo-600 hover:underline"
           >
             View all orders

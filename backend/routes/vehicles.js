@@ -19,7 +19,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireRole } from "../middleware/roles.js";
 
 const router = express.Router();
-
+router.use("/", requireAuth);
 router.get("/", getVehicles);
 router.get("/stats/overview", getVehicleOverviewStats);
 router.get("/map/locations", getVehicleLocationsForMap);

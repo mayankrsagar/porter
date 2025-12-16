@@ -1,5 +1,5 @@
 // backend/controllers/adminUsersController.js
-import User from '../models/User.js';
+import User from "../models/User.js";
 
 /**
  * GET /api/admin/users

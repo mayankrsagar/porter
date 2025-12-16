@@ -1,10 +1,5 @@
 // src/pages/Booking.jsx
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   Autocomplete,
@@ -12,9 +7,9 @@ import {
   GoogleMap,
   Marker,
   useJsApiLoader,
-} from '@react-google-maps/api';
+} from "@react-google-maps/api";
 
-import { apiFetch } from '../services/api';
+import { apiFetch } from "../services/api";
 
 const GOOGLE_MAPS_LIBRARIES = ["places"];
 const DEFAULT_CENTER = { lat: 19.076, lng: 72.8777 };
@@ -46,6 +41,8 @@ export default function Booking() {
   const [status, setStatus] = useState(null);
   const [directionsResult, setDirectionsResult] = useState(null);
   const [routeDistanceKm, setRouteDistanceKm] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [geoLoading, setGeoLoading] = useState({ pickup: false, drop: false }); // Replace loading for geolocation
 
   const pickupAutocompleteRef = useRef(null);
   const dropAutocompleteRef = useRef(null);
@@ -209,7 +206,7 @@ export default function Booking() {
       return;
     }
 
-    setLoading(true);
+    setGeoLoading((prev) => ({ ...prev, [forField]: true }));
     setStatus(null);
 
     navigator.geolocation.getCurrentPosition(
@@ -238,17 +235,17 @@ export default function Booking() {
         if (isLoaded && window.google) {
           const geocoder = new window.google.maps.Geocoder();
           geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-            if (status === "OK" && results && results[0]) {
+            if (status === "OK" && results?.[0]) {
               updateCoords(results[0].formatted_address);
             } else {
               updateCoords(null);
             }
-            setLoading(false);
+            setGeoLoading((prev) => ({ ...prev, [forField]: false }));
             setStatus({ ok: true, msg: "Location captured." });
           });
         } else {
           updateCoords(null);
-          setLoading(false);
+          setGeoLoading((prev) => ({ ...prev, [forField]: false }));
           setStatus({
             ok: true,
             msg: "Location captured (no reverse geocode).",
@@ -257,7 +254,7 @@ export default function Booking() {
       },
       (err) => {
         console.error(err);
-        setLoading(false);
+        setGeoLoading((prev) => ({ ...prev, [forField]: false }));
         setStatus({
           ok: false,
           msg: "Unable to get current location: " + err.message,
@@ -279,8 +276,9 @@ export default function Booking() {
       return;
     }
 
-    setLoading(true);
+    setIsSubmitting(true); // ✅ use isSubmitting instead of loading
     try {
+      // --- Distance calculation logic preserved from old code ---
       let distanceKm = routeDistanceKm;
       if (distanceKm == null) {
         const pLat = Number(form.pickupLat) || 0;
@@ -290,8 +288,10 @@ export default function Booking() {
         distanceKm = haversineDistance(pLat, pLng, dLat, dLng) || 10;
       }
 
+      // --- Pricing logic preserved ---
       const pricing = computePricing(distanceKm, Number(form.weight || 1));
 
+      // --- Payload construction preserved ---
       const payload = {
         customer: {
           name: form.name,
@@ -324,12 +324,13 @@ export default function Booking() {
         pricing,
       };
 
-      // ✅ use axios wrapper instead of fetch
+      // --- API call preserved ---
       const body = await apiFetch("/orders", {
         method: "post",
         body: payload,
       });
 
+      // --- Success logic preserved ---
       setStatus({ ok: true, msg: "Booking created successfully!", data: body });
       setForm({
         pickupAddress: "",
@@ -352,7 +353,7 @@ export default function Booking() {
       console.error(err);
       setStatus({ ok: false, msg: err.message || "Failed to create booking" });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false); // ✅ reset submission state
     }
   }
 
@@ -373,7 +374,7 @@ export default function Booking() {
       </div>
     );
   }
-
+  const isButtonDisabled = isSubmitting || geoLoading.pickup || geoLoading.drop;
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -746,13 +747,13 @@ export default function Booking() {
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
             <button
               type="submit"
-              disabled={loading}
-              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-semibold rounded-lg transition duration-200 flex items-center gap-2 shadow-sm"
+              disabled={isButtonDisabled}
+              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition duration-200 flex items-center gap-2 shadow-sm"
             >
-              {loading && (
+              {isSubmitting && (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
               )}
-              {loading ? "Creating Booking..." : "Create Booking"}
+              {isSubmitting ? "Creating Booking..." : "Create Booking"}
             </button>
 
             {status && (

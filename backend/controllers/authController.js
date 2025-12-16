@@ -1,9 +1,9 @@
-import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import jwt from 'jsonwebtoken';
+import bcrypt from "bcryptjs";
+import fs from "fs";
+import jwt from "jsonwebtoken";
 
-import User from '../models/User.js';
-import cloudinary, { deleteFromCloudinary } from '../utils/cloudinary.js';
+import User from "../models/User.js";
+import cloudinary, { deleteFromCloudinary } from "../utils/cloudinary.js";
 
 const createToken = (user) => {
   return jwt.sign({ id: user._id }, process.env.JWT_SECRET, {

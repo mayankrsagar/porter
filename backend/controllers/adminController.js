@@ -1,11 +1,11 @@
 // backend/controllers/adminController.js
-import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
-import fs from 'fs';
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import fs from "fs";
 
-import Driver from '../models/Driver.js';
-import User from '../models/User.js';
-import cloudinary from '../utils/cloudinary.js';
+import Driver from "../models/Driver.js";
+import User from "../models/User.js";
+import cloudinary from "../utils/cloudinary.js";
 
 // Create driver (kept simple but compatible with your Driver schema)
 export const createDriver = async (req, res) => {

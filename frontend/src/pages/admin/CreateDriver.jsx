@@ -1,228 +1,315 @@
 // frontend/src/pages/admin/CreateDriver.jsx
-import React, { useState } from "react";
-
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
 import { apiFetch } from "../../services/api";
 
+/**
+ * Admin Create Driver page
+ * - Posts multipart/form-data to /admin/drivers
+ * - Fetches vehicles for quick assignment
+ * - Shows generated password modal with copy-to-clipboard
+ */
+
+function PasswordModal({ open, password, onClose }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white p-6 rounded-lg max-w-md w-full">
+        <h3 className="text-lg font-semibold mb-2">Driver created</h3>
+        <p className="text-sm text-slate-600 mb-4">
+          Share the generated password with the driver. You can copy it to clipboard.
+        </p>
+        <div className="bg-slate-50 border rounded px-4 py-3 mb-4">
+          <div className="text-xs text-slate-500">Password</div>
+          <div className="text-xl font-mono font-semibold">{password}</div>
+        </div>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={() => {
+              try {
+                navigator.clipboard.writeText(password);
+              } catch (e) {
+                console.warn("Clipboard copy failed", e);
+              }
+            }}
+            className="px-3 py-2 rounded border"
+          >
+            Copy
+          </button>
+          <button
+            onClick={onClose}
+            className="px-3 py-2 rounded bg-indigo-600 text-white"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminCreateDriver() {
+  const navigate = useNavigate();
+
   const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState(""); // optional
+  const [password, setPassword] = useState(""); // optional override
   const [phone, setPhone] = useState("");
   const [licenseNumber, setLicenseNumber] = useState("");
   const [vehicleId, setVehicleId] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [avatarFile, setAvatarFile] = useState(null);
-  const [generatedPassword, setGeneratedPassword] = useState(null);
+
+  const [vehicles, setVehicles] = useState([]);
+  const [loadingVehicles, setLoadingVehicles] = useState(false);
 
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
+  const [generatedPassword, setGeneratedPassword] = useState(null);
+  const [showModal, setShowModal] = useState(false);
 
-  const nav = useNavigate();
+  useEffect(() => {
+    // fetch vehicles for assignment dropdown (first 200)
+    let mounted = true;
+    async function loadVehicles() {
+      setLoadingVehicles(true);
+      try {
+        const res = await apiFetch("/vehicles?page=1&limit=200");
+        // res may be { vehicles, totalPages } or array
+        const list = Array.isArray(res) ? res : res?.vehicles || res?.data || [];
+        if (mounted) setVehicles(list);
+      } catch (e) {
+        console.error("Failed to load vehicles", e);
+      } finally {
+        if (mounted) setLoadingVehicles(false);
+      }
+    }
+    loadVehicles();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const resetForm = () => {
+    setName("");
+    setFirstName("");
+    setLastName("");
+    setEmail("");
+    setPassword("");
+    setPhone("");
+    setLicenseNumber("");
+    setVehicleId("");
+    setVehicleNumber("");
+    setAvatarFile(null);
+    setError("");
+    setMsg("");
+    setGeneratedPassword(null);
+  };
+
+  const handleFileChange = (e) => {
+    const f = e.target.files?.[0] || null;
+    setAvatarFile(f);
+  };
 
   const submit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setMsg(null);
+    e?.preventDefault?.();
+    setError("");
+    setMsg("");
     setGeneratedPassword(null);
 
-    if (!name.trim() || !email.trim()) {
-      setError("Name and email are required.");
+    // Basic validation
+    const nameToUse = (name || `${firstName} ${lastName}`.trim()).trim();
+    if (!nameToUse || !email) {
+      setError("Please provide name and email.");
       return;
     }
 
-    const form = new FormData();
-    form.append("name", name.trim());
-    form.append("email", email.trim().toLowerCase());
-    if (password) form.append("password", password);
-    if (phone) form.append("phone", phone);
-    if (licenseNumber) form.append("licenseNumber", licenseNumber);
-    if (vehicleId) form.append("vehicleId", vehicleId);
-    if (vehicleNumber) form.append("vehicleNumber", vehicleNumber);
-    if (avatarFile) form.append("avatar", avatarFile);
-
     setLoading(true);
     try {
+      const form = new FormData();
+      form.append("name", nameToUse);
+      if (firstName) form.append("firstName", firstName);
+      if (lastName) form.append("lastName", lastName);
+      form.append("email", email);
+      if (password) form.append("password", password);
+      if (phone) form.append("phone", phone);
+      if (licenseNumber) form.append("licenseNumber", licenseNumber);
+      if (vehicleId) form.append("vehicleId", vehicleId);
+      if (vehicleNumber) form.append("vehicleNumber", vehicleNumber);
+      if (avatarFile) form.append("avatar", avatarFile);
+
       const res = await apiFetch("/admin/drivers", {
         method: "post",
         body: form,
       });
 
-      // res = { message, user, driver, plainPassword? }
-      setMsg(res.message || "Driver created");
-      setGeneratedPassword(res.plainPassword || null);
-
-      // reset form or navigate to drivers list
-      setName("");
-      setEmail("");
-      setPassword("");
-      setPhone("");
-      setLicenseNumber("");
-      setVehicleId("");
-      setVehicleNumber("");
-      setAvatarFile(null);
-      setError(null);
+      setMsg(res?.message || "Driver created");
+      setGeneratedPassword(res?.plainPassword || null);
+      setShowModal(Boolean(res?.plainPassword));
     } catch (err) {
-      console.error("Create driver error:", err);
-      setError(err?.message || err?.data?.message || "Failed to create driver");
+      console.error("create driver err:", err);
+      const message =
+        err?.message ||
+        err?.data?.message ||
+        err?.response?.data?.message ||
+        "Failed to create driver";
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-6">
-      <div className="w-full max-w-2xl bg-white p-6 rounded-xl shadow">
-        <h2 className="text-lg font-semibold mb-2">Admin — Create Driver</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          Create driver accounts. Drivers must be created by admins.
-        </p>
+    <div className="max-w-3xl mx-auto py-6 px-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Create Driver</h1>
+          <p className="text-sm text-slate-500">Add a new driver (admin only).</p>
+        </div>
+        <div>
+          <button
+            onClick={() => navigate("/admin/drivers")}
+            className="px-3 py-2 rounded border"
+          >
+            Back to drivers
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white border rounded-xl p-6">
+        {error && (
+          <div className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded px-4 py-2">
+            {error}
+          </div>
+        )}
+        {msg && (
+          <div className="mb-3 text-sm text-emerald-800 bg-emerald-50 border border-emerald-100 rounded px-4 py-2">
+            {msg}
+          </div>
+        )}
 
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Full name
-              </label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="mt-1 w-full p-2 border rounded"
-                placeholder="Driver name"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Email</label>
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                type="email"
-                className="mt-1 w-full p-2 border rounded"
-                placeholder="driver@example.com"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Password (optional)
-              </label>
-              <input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                type="password"
-                className="mt-1 w-full p-2 border rounded"
-                placeholder="Leave blank to auto-generate"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Phone</label>
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="mt-1 w-full p-2 border rounded"
-                placeholder="9876543210"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                License number
-              </label>
-              <input
-                value={licenseNumber}
-                onChange={(e) => setLicenseNumber(e.target.value)}
-                className="mt-1 w-full p-2 border rounded"
-                placeholder="LIC-1234"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Vehicle (optional)
-              </label>
-              <input
-                value={vehicleNumber}
-                onChange={(e) => setVehicleNumber(e.target.value)}
-                className="mt-1 w-full p-2 border rounded"
-                placeholder="Vehicle number"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-700">Avatar</label>
             <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
-              className="mt-1"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full name (optional if you set first/last)"
+              className="w-full px-3 py-2 border rounded"
+            />
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email (required)"
+              type="email"
+              className="w-full px-3 py-2 border rounded"
             />
           </div>
 
-          {error && (
-            <div className="text-sm text-red-600">
-              {typeof error === "string"
-                ? error
-                : error.message || JSON.stringify(error)}
-            </div>
-          )}
-          {msg && <div className="text-sm text-green-700">{msg}</div>}
-          {generatedPassword && (
-            <div className="mt-2 p-3 bg-yellow-50 border border-yellow-100 rounded text-sm">
-              <strong>Generated password:</strong>
-              <div className="mt-1">
-                <code className="px-2 py-1 bg-white border rounded">
-                  {generatedPassword}
-                </code>
-                <button
-                  onClick={() =>
-                    navigator.clipboard?.writeText(generatedPassword)
-                  }
-                  className="ml-2 px-2 py-1 text-xs rounded border"
-                >
-                  Copy
-                </button>
-              </div>
-            </div>
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="First name"
+              className="w-full px-3 py-2 border rounded"
+            />
+            <input
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Last name"
+              className="w-full px-3 py-2 border rounded"
+            />
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Phone"
+              className="w-full px-3 py-2 border rounded"
+            />
+          </div>
 
-          <div className="flex items-center gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input
+              value={licenseNumber}
+              onChange={(e) => setLicenseNumber(e.target.value)}
+              placeholder="License number"
+              className="w-full px-3 py-2 border rounded"
+            />
+
+            <div>
+              <label className="block text-sm text-slate-700 mb-1">Assign vehicle</label>
+              {loadingVehicles ? (
+                <div className="text-sm text-slate-500">Loading vehicles...</div>
+              ) : (
+                <select
+                  value={vehicleId}
+                  onChange={(e) => setVehicleId(e.target.value)}
+                  className="w-full px-3 py-2 border rounded"
+                >
+                  <option value="">-- none --</option>
+                  {vehicles.map((v) => {
+                    const vid = v._id || v.vehicleId || v.id;
+                    const label = v.registrationNumber || v.vehicleNumber || v.registration || (v.type ? `${v.type} • ${vid}` : vid);
+                    return <option key={vid} value={vid}>{label}</option>;
+                  })}
+                </select>
+              )}
+            </div>
+
+            <input
+              value={vehicleNumber}
+              onChange={(e) => setVehicleNumber(e.target.value)}
+              placeholder="Vehicle number (optional)"
+              className="w-full px-3 py-2 border rounded"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-700 mb-1">Avatar (optional)</label>
+            <input type="file" accept="image/*" onChange={handleFileChange} />
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
-              disabled={loading}
               type="submit"
-              className={`px-4 py-2 rounded bg-indigo-600 text-white ${
-                loading ? "opacity-70" : "hover:bg-indigo-700"
-              }`}
+              disabled={loading}
+              className="px-4 py-2 rounded bg-indigo-600 text-white disabled:opacity-60"
             >
-              {loading ? "Creating..." : "Create Driver"}
+              {loading ? "Creating..." : "Create driver"}
             </button>
             <button
               type="button"
-              onClick={() => {
-                /* reset */ setName("");
-                setEmail("");
-                setPassword("");
-                setPhone("");
-                setLicenseNumber("");
-                setVehicleId("");
-                setVehicleNumber("");
-                setAvatarFile(null);
-                setError(null);
-                setMsg(null);
-                setGeneratedPassword(null);
-              }}
+              onClick={resetForm}
               className="px-3 py-2 border rounded"
             >
               Reset
             </button>
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="px-3 py-2 border rounded"
+            >
+              Cancel
+            </button>
           </div>
+
+          {generatedPassword && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-100 rounded text-sm">
+              Generated password (will be shown once): <strong>{generatedPassword}</strong>
+            </div>
+          )}
         </form>
       </div>
+
+      <PasswordModal
+        open={showModal}
+        password={generatedPassword}
+        onClose={() => {
+          setShowModal(false);
+          // keep password visible in page but hide modal
+        }}
+      />
     </div>
   );
 }

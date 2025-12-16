@@ -1,5 +1,5 @@
 // backend/routes/drivers.js
-import express from 'express';
+import express from "express";
 
 import {
   assignVehicleToDriver,
@@ -12,18 +12,19 @@ import {
   updateDriverLocation,
   updateDriverPerformance,
   updateDriverStatus,
-} from '../controllers/driverController.js';
+} from "../controllers/driverController.js";
 // job actions belong to orderController
 import {
   acceptJob,
   completeJob,
   pickupJob,
-} from '../controllers/orderController.js';
-import { requireAuth } from '../middleware/auth.js';
-import { requireRole } from '../middleware/roles.js';
+} from "../controllers/orderController.js";
+import { requireAuth } from "../middleware/auth.js";
+import { requireRole } from "../middleware/roles.js";
 
 const router = express.Router();
 
+router.use("/", requireAuth);
 // Admin/management endpoints
 router.get("/", getDrivers);
 router.get("/stats/overview", getDriverOverviewStats);
