@@ -18,6 +18,7 @@ import MyOrders from "./pages/MyOrders";
 import NotFound from "./pages/NotFound";
 import OrderDetailsPageInner from "./pages/OrderDetails";
 import OrdersPage from "./pages/Orders";
+import OrderTracking from "./pages/OrderTracking.jsx";
 import Profile from "./pages/Profile";
 import Register from "./pages/Register";
 import VehiclesPage from "./pages/Vehicles";
@@ -147,7 +148,19 @@ export default function App() {
             />
             <Route
               path="/orders/:id"
-              element={<OrderDetailsPageInner />} // or element={<OrderDetailsPage />} depending on your export
+              element={
+                <ProtectedRoute roles={["user", "admin"]}>
+                  <OrderDetailsPageInner />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tracking/:orderId"
+              element={
+                <ProtectedRoute roles={["user", "admin", "driver"]}>
+                  <OrderTracking />
+                </ProtectedRoute>
+              }
             />
 
             {/* 404 */}

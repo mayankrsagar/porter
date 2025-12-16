@@ -6,6 +6,7 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+
       default: () =>
         "ORD-" +
         Date.now() +
@@ -74,6 +75,13 @@ const orderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Vehicle",
     },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
     timeline: [
       {
         status: String,

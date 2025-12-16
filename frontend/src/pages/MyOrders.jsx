@@ -36,6 +36,8 @@ export default function MyOrders() {
       const path1 = `/orders/my?page=${pageNum}&limit=${lim}`;
       try {
         const res = await apiFetch(path1);
+        console.log("thisis inside the MyOrder");
+        console.log(res);
         // Accept both array or { orders, total, ... }
         if (Array.isArray(res)) {
           setOrders(res);

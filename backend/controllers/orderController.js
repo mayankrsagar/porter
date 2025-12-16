@@ -211,14 +211,15 @@ export async function getMyOrders(req, res) {
     }
 
     const { page = 1, limit = 20, q } = req.query;
-    const pageNum = parseInt(page, 10) || 1;
-    const limitNum = parseInt(limit, 10) || 20;
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
 
-    const filter = {};
-    // driver: assigned orders
+    let filter = {};
+
+    // DRIVER FLOW
     if (req.user.role === "driver") {
-      const drv = await Driver.findOne({ user: req.user._id }).lean();
-      if (!drv) {
+      const driver = await Driver.findOne({ user: req.user._id });
+      if (!driver) {
         return res.json({
           orders: [],
           total: 0,
@@ -226,18 +227,18 @@ export async function getMyOrders(req, res) {
           currentPage: pageNum,
         });
       }
-      filter.assignedDriver = drv._id;
-    } else {
-      // customer: orders where customer.user === req.user._id
-      filter["customer.user"] = req.user._id;
+      filter.assignedDriver = driver._id;
+    }
+    // CUSTOMER FLOW
+    else {
+      filter.createdBy = req.user._id;
     }
 
-    if (q && q.trim()) {
-      const qq = q.trim();
+    if (q?.trim()) {
       filter.$or = [
-        { orderId: { $regex: qq, $options: "i" } },
-        { "customer.name": { $regex: qq, $options: "i" } },
-        { "customer.phone": { $regex: qq, $options: "i" } },
+        { orderId: new RegExp(q, "i") },
+        { "customer.name": new RegExp(q, "i") },
+        { "customer.phone": new RegExp(q, "i") },
       ];
     }
 
@@ -248,16 +249,17 @@ export async function getMyOrders(req, res) {
       )
       .populate("assignedVehicle", "registrationNumber type vehicleId")
       .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
-      .skip((pageNum - 1) * limitNum);
+      .lean();
 
     const total = await Order.countDocuments(filter);
 
-    res.json({
+    return res.json({
       orders,
+      total,
       totalPages: Math.ceil(total / limitNum),
       currentPage: pageNum,
-      total,
     });
   } catch (error) {
     console.error("getMyOrders error:", error);
@@ -286,7 +288,15 @@ export async function getOrderById(req, res) {
 // Create order
 export async function createOrder(req, res) {
   try {
-    const order = new Order(req.body);
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    const order = new Order({
+      ...req.body,
+      createdBy: req.user._id, // 🔑 LINK ORDER TO USER
+    });
+
     order.timeline = order.timeline || [];
     order.timeline.push({
       status: "pending",
@@ -294,7 +304,9 @@ export async function createOrder(req, res) {
       notes: "Order created",
       timestamp: new Date(),
     });
+
     await order.save();
+
     await order.populate(
       "assignedDriver",
       "personalInfo.firstName personalInfo.lastName driverId"
@@ -303,7 +315,9 @@ export async function createOrder(req, res) {
       "assignedVehicle",
       "registrationNumber type vehicleId"
     );
+
     io.to("fleet-updates").emit("order-created", order);
+
     res.status(201).json(order);
   } catch (error) {
     console.error("createOrder error:", error);
